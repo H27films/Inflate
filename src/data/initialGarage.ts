@@ -240,6 +240,21 @@ export function formatTyreAge(dateStr: string): string {
   return `${years}y ${remMonths}m`;
 }
 
+export function formatTyreAgeMonths(dateStr: string): string {
+  const today = new Date();
+  const bought = parseLocalDate(dateStr);
+  let months =
+    (today.getFullYear() - bought.getFullYear()) * 12 +
+    (today.getMonth() - bought.getMonth());
+  if (today.getDate() < bought.getDate()) {
+    months -= 1;
+  }
+  if (months <= 0) {
+    return '0months';
+  }
+  return months === 1 ? '1month' : `${months}months`;
+}
+
 export function getCornerPurchaseInfo(
   purchaseLogs: PurchaseLogEntry[],
   corner: TyreCorner

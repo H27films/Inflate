@@ -12,7 +12,7 @@ import {
 } from './types';
 import {
   formatDisplayDate,
-  formatTyreAge,
+  formatTyreAgeMonths,
   getCornerPurchaseInfo,
   getDaysSince,
   INITIAL_CONTACTS,
@@ -187,8 +187,8 @@ export default function App() {
       }
     >
       {/* Top Bar: Left Add Purchase (on Purchases) · Centered clickable INFLATE · Top-Right Switch Cars */}
-      <header className="shrink-0 z-20 bg-[#F3F4F2] border-b border-black/6">
-        <div className="max-w-5xl mx-auto px-4 h-12 relative flex items-center justify-center">
+      <header className="shrink-0 z-20 bg-[#F3F4F2] border-b border-black/6 pt-[calc(0.75rem+env(safe-area-inset-top))]">
+        <div className="max-w-5xl mx-auto px-4 h-13 pb-0.5 relative flex items-center justify-center">
 
           {activeTab === 'purchases' && (
             <button
@@ -284,13 +284,13 @@ export default function App() {
               />
             </div>
 
-            {/* 4 Corner Boxes: FL, FR, RL, RR showing set kPa, PSI top-right, and age bottom-right */}
-            <div className="shrink-0 grid grid-cols-2 gap-2">
+            {/* 4 Corner Boxes: FL, FR, RL, RR showing set kPa, age top-right, and PSI bottom-right */}
+            <div className="shrink-0 grid grid-cols-2 gap-2.5">
               {TYRE_CORNERS.map((corner) => {
                 const setKpa = activeCar.recommendedKpa[corner];
                 const psiApprox = Math.round(setKpa * 0.145);
                 const purchaseInfo = getCornerPurchaseInfo(activeCar.purchaseLogs, corner);
-                const tyreAge = purchaseInfo ? formatTyreAge(purchaseInfo.date) : null;
+                const tyreAge = purchaseInfo ? formatTyreAgeMonths(purchaseInfo.date) : null;
                 const isSelected = selectedCorner === corner;
 
                 return (
@@ -298,10 +298,10 @@ export default function App() {
                     key={corner}
                     type="button"
                     onClick={() => setSelectedCorner(isSelected ? null : corner)}
-                    className={`px-3 py-2 rounded-2xl border text-left transition-all cursor-pointer ${
+                    className={`px-3 py-2.5 rounded-2xl text-left transition-all cursor-pointer ${
                       isSelected
-                        ? 'bg-[#111315] text-white border-[#111315]'
-                        : 'bg-white text-[#111315] border-black/7 hover:border-black/15'
+                        ? 'bg-[#111315] text-white shadow-[0_0_10px_1px_rgba(17,19,21,0.18)]'
+                        : 'bg-[#E6E8E4] text-[#111315] shadow-[0_0_8px_1px_rgba(17,19,21,0.07)] hover:bg-[#DFE2DD]'
                     }`}
                   >
                     <div className="flex items-center justify-between gap-1 whitespace-nowrap">
@@ -312,13 +312,15 @@ export default function App() {
                       >
                         {corner}
                       </span>
-                      <span
-                        className={`font-mono text-[10.5px] sm:text-[11px] tracking-tight tabular-nums whitespace-nowrap ${
-                          isSelected ? 'text-white/70' : 'text-[#6B7075]'
-                        }`}
-                      >
-                        {psiApprox} PSI
-                      </span>
+                      {tyreAge && (
+                        <span
+                          className={`font-display text-[13px] font-semibold tracking-tight tabular-nums whitespace-nowrap ${
+                            isSelected ? 'text-white/95' : 'text-[#111315]'
+                          }`}
+                        >
+                          {tyreAge}
+                        </span>
+                      )}
                     </div>
                     <div className="mt-0.5 flex items-baseline justify-between gap-2">
                       <div className="flex items-baseline gap-1">
@@ -333,15 +335,13 @@ export default function App() {
                           kPa
                         </span>
                       </div>
-                      {tyreAge && (
-                        <span
-                          className={`font-mono text-xs font-semibold tabular-nums whitespace-nowrap ${
-                            isSelected ? 'text-white/80' : 'text-[#5E646A]'
-                          }`}
-                        >
-                          {tyreAge}
-                        </span>
-                      )}
+                      <span
+                        className={`font-mono text-[10.5px] sm:text-[11px] tracking-tight tabular-nums whitespace-nowrap ${
+                          isSelected ? 'text-white/70' : 'text-[#5E646A]'
+                        }`}
+                      >
+                        {psiApprox} PSI
+                      </span>
                     </div>
                   </button>
                 );

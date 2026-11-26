@@ -248,6 +248,13 @@ export function formatRelativeDays(dateStr: string): string {
   return `${years}y ago`;
 }
 
+export function formatDaysAgoLabel(dateStr: string): string {
+  const diffDays = getDaysSince(dateStr);
+  if (diffDays <= 0) return 'Today';
+  if (diffDays === 1) return '1 day ago';
+  return `${diffDays} days ago`;
+}
+
 export function formatTyreAge(dateStr: string): string {
   const today = new Date();
   const bought = parseLocalDate(dateStr);

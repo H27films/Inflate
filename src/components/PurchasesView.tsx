@@ -358,20 +358,20 @@ export function PurchasesView({
     return () => window.clearTimeout(timer);
   }, [highlightedPurchaseId]);
 
+  const scrollToBottomOfPage = () => {
+    window.scrollTo({
+      top: Math.max(
+        document.documentElement.scrollHeight,
+        document.body.scrollHeight
+      ),
+      behavior: 'smooth',
+    });
+  };
+
   useEffect(() => {
     if (!contactsExpanded) return;
-    const t1 = window.setTimeout(() => {
-      contactsSectionRef.current?.scrollIntoView({
-        behavior: 'smooth',
-        block: 'end',
-      });
-    }, 80);
-    const t2 = window.setTimeout(() => {
-      contactsSectionRef.current?.scrollIntoView({
-        behavior: 'smooth',
-        block: 'end',
-      });
-    }, 240);
+    const t1 = window.setTimeout(scrollToBottomOfPage, 100);
+    const t2 = window.setTimeout(scrollToBottomOfPage, 320);
     return () => {
       window.clearTimeout(t1);
       window.clearTimeout(t2);
@@ -385,7 +385,7 @@ export function PurchasesView({
         behavior: 'smooth',
         block: 'nearest',
       });
-    }, 180);
+    }, 220);
     return () => window.clearTimeout(t);
   }, [installationsExpanded]);
 
@@ -703,130 +703,138 @@ export function PurchasesView({
 
         </div>
 
-        {/* Bottom Collapsible Bars: Installation by Tyre (Greyish) + Contacts (Black) */}
-        <div className="mt-3 sm:px-6 space-y-2.5">
-          {/* Per-Corner Installed Tyres: Compact Greyish Bar -> White Expanded Card */}
+        {/* Bottom Stacked Drawers: Installation by Tyre (Behind) + Contacts (Front) */}
+        <div className="mt-3 sm:px-6">
+          {/* Per-Corner Installed Tyres: Greyish Tab Behind Contacts -> White Expanded Drawer */}
           <section
             ref={installationsSectionRef}
-            className={
+            className={`relative z-0 scroll-mb-24 overflow-hidden transition-colors duration-300 rounded-t-3xl rounded-b-none ${
               installationsExpanded
-                ? 'mx-4 sm:mx-0 bg-white rounded-3xl border border-black/7 overflow-hidden transition-colors'
-                : 'bg-[#E2E4E0] text-[#111315] rounded-t-3xl rounded-b-none lg:rounded-3xl border-t border-x lg:border border-black/8 shadow-[0_-2px_10px_rgba(17,19,21,0.03)] overflow-hidden transition-colors'
-            }
+                ? 'bg-white border-t border-x border-black/7 shadow-[0_-4px_16px_rgba(17,19,21,0.04)]'
+                : 'bg-[#E2E4E0] text-[#111315]'
+            }`}
           >
-            {installationsExpanded ? (
-              <div className="p-4 sm:p-5">
-                <button
-                  type="button"
-                  onClick={() => setInstallationsExpanded(false)}
-                  aria-expanded={true}
-                  className="w-full flex items-center justify-between gap-3 mb-3 text-left cursor-pointer group"
+            <button
+              type="button"
+              onClick={() => setInstallationsExpanded((prev) => !prev)}
+              aria-expanded={installationsExpanded}
+              className={`w-full px-5 flex items-center justify-between gap-3 text-left transition-all duration-300 cursor-pointer ${
+                installationsExpanded
+                  ? 'pt-4 pb-3 hover:bg-black/[0.015]'
+                  : 'pt-3.5 pb-8 hover:bg-black/[0.03]'
+              }`}
+            >
+              <h2
+                className={`font-display font-semibold text-[#111315] transition-all duration-300 ${
+                  installationsExpanded ? 'text-sm' : 'text-base'
+                }`}
+              >
+                {installationsExpanded ? 'Installed tyres by corner' : 'Installation by Tyre'}
+              </h2>
+              <span className="inline-flex items-center gap-1.5 text-xs text-[#5E646A]">
+                {installationsExpanded && <span>Age &amp; last price</span>}
+                <ChevronDown
+                  className={`w-4 h-4 transition-transform duration-300 ${
+                    installationsExpanded ? 'rotate-180' : ''
+                  }`}
+                />
+              </span>
+            </button>
+
+            <AnimatePresence initial={false}>
+              {installationsExpanded && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.3, ease: [0.42, 0, 0.58, 1] }}
+                  className="overflow-hidden"
                 >
-                  <h2 className="font-display text-sm font-semibold text-[#111315]">
-                    Installed tyres by corner
-                  </h2>
-                  <span className="inline-flex items-center gap-1.5 text-xs text-[#5E646A] group-hover:text-[#111315] transition-colors">
-                    <span>Age &amp; last price</span>
-                    <ChevronDown className="w-4 h-4 rotate-180 transition-transform duration-200" />
-                  </span>
-                </button>
+                  <div className="px-4 sm:px-5 pb-9 grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+                    {TYRE_CORNERS.map((corner) => {
+                      const info = getCornerPurchaseInfo(car.purchaseLogs, corner);
+                      const age = info ? formatTyreAge(info.date) : '—';
+                      const perTyre =
+                        info && info.corners.length > 0
+                          ? Math.round((info.totalCost / info.corners.length) * 100) / 100
+                          : null;
 
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
-                  {TYRE_CORNERS.map((corner) => {
-                    const info = getCornerPurchaseInfo(car.purchaseLogs, corner);
-                    const age = info ? formatTyreAge(info.date) : '—';
-                    const perTyre =
-                      info && info.corners.length > 0
-                        ? Math.round((info.totalCost / info.corners.length) * 100) / 100
-                        : null;
-
-                    const cardInner = (
-                      <>
-                        <div className="flex items-baseline justify-between gap-2">
-                          <span className="font-mono text-xs font-semibold text-[#111315]">
-                            {corner}
-                          </span>
-                          <span className="font-display text-lg font-bold tabular-nums text-[#111315]">
-                            {age}
-                          </span>
-                        </div>
-                        <div className="flex items-baseline justify-between gap-1 mt-0.5">
-                          <p className="text-[10.5px] sm:text-[11px] text-[#5E646A] whitespace-nowrap">
-                            {CORNER_LABELS[corner]}
-                          </p>
-                          {perTyre !== null && (
-                            <span className="font-mono text-[10.5px] sm:text-[11px] font-semibold text-[#111315] tabular-nums whitespace-nowrap shrink-0">
-                              {formatRM(perTyre)}
+                      const cardInner = (
+                        <>
+                          <div className="flex items-baseline justify-between gap-2">
+                            <span className="font-mono text-xs font-semibold text-[#111315]">
+                              {corner}
                             </span>
-                          )}
-                        </div>
-                        {info ? (
-                          <div className="mt-2 pt-2 border-t border-black/6 text-[11px] text-[#5E646A] space-y-1">
-                            <p className="text-xs font-semibold text-[#111315] leading-snug">
-                              {info.brandModel}
-                            </p>
-                            <p className="font-mono text-[#5E646A] truncate">
-                              {info.tyreSize}
-                            </p>
-                            <p className="tabular-nums text-[#5E646A]">
-                              {formatDisplayDate(info.date)}
-                            </p>
-                            <p className="font-mono text-xs font-bold text-[#111315] tabular-nums">
-                              {formatRM(info.totalCost)} total
-                            </p>
+                            <span className="font-display text-lg font-bold tabular-nums text-[#111315]">
+                              {age}
+                            </span>
                           </div>
-                        ) : (
-                          <p className="mt-2 pt-2 border-t border-black/6 text-[11px] text-[#6B7075]">
-                            No purchase recorded
-                          </p>
-                        )}
-                      </>
-                    );
+                          <div className="flex items-baseline justify-between gap-1 mt-0.5">
+                            <p className="text-[10.5px] sm:text-[11px] text-[#5E646A] whitespace-nowrap">
+                              {CORNER_LABELS[corner]}
+                            </p>
+                            {perTyre !== null && (
+                              <span className="font-mono text-[10.5px] sm:text-[11px] font-semibold text-[#111315] tabular-nums whitespace-nowrap shrink-0">
+                                {formatRM(perTyre)}
+                              </span>
+                            )}
+                          </div>
+                          {info ? (
+                            <div className="mt-2 pt-2 border-t border-black/6 text-[11px] text-[#5E646A] space-y-1">
+                              <p className="text-xs font-semibold text-[#111315] leading-snug">
+                                {info.brandModel}
+                              </p>
+                              <p className="font-mono text-[#5E646A] truncate">
+                                {info.tyreSize}
+                              </p>
+                              <p className="tabular-nums text-[#5E646A]">
+                                {formatDisplayDate(info.date)}
+                              </p>
+                              <p className="font-mono text-xs font-bold text-[#111315] tabular-nums">
+                                {formatRM(info.totalCost)} total
+                              </p>
+                            </div>
+                          ) : (
+                            <p className="mt-2 pt-2 border-t border-black/6 text-[11px] text-[#6B7075]">
+                              No purchase recorded
+                            </p>
+                          )}
+                        </>
+                      );
 
-                    if (info) {
+                      if (info) {
+                        return (
+                          <button
+                            key={corner}
+                            type="button"
+                            onClick={() => scrollToPurchase(info.id)}
+                            aria-label={`Jump to ${CORNER_LABELS[corner]} purchase in purchase log`}
+                            className="p-3.5 rounded-2xl bg-[#F3F4F2] border border-black/5 text-left hover:bg-[#EAECE9] active:scale-[0.98] transition-all cursor-pointer"
+                          >
+                            {cardInner}
+                          </button>
+                        );
+                      }
+
                       return (
-                        <button
+                        <div
                           key={corner}
-                          type="button"
-                          onClick={() => scrollToPurchase(info.id)}
-                          aria-label={`Jump to ${CORNER_LABELS[corner]} purchase in purchase log`}
-                          className="p-3.5 rounded-2xl bg-[#F3F4F2] border border-black/5 text-left hover:bg-[#EAECE9] active:scale-[0.98] transition-all cursor-pointer"
+                          className="p-3.5 rounded-2xl bg-[#F3F4F2] border border-black/5"
                         >
                           {cardInner}
-                        </button>
+                        </div>
                       );
-                    }
-
-                    return (
-                      <div
-                        key={corner}
-                        className="p-3.5 rounded-2xl bg-[#F3F4F2] border border-black/5"
-                      >
-                        {cardInner}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setInstallationsExpanded(true)}
-                aria-expanded={false}
-                className="w-full px-5 py-3.5 flex items-center justify-between gap-3 text-left hover:bg-black/[0.03] transition-colors cursor-pointer"
-              >
-                <h2 className="font-display text-base font-semibold text-[#111315]">
-                  Installation by Tyre
-                </h2>
-                <ChevronDown className="w-4 h-4 text-[#5E646A] transition-transform duration-200" />
-              </button>
-            )}
+                    })}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </section>
 
-          {/* Collapsible Contacts Bar: Top-rounded edges matching PressureLogSheet */}
+          {/* Collapsible Contacts Bar: Overlaps bottom of Installation by Tyre */}
           <section
             ref={contactsSectionRef}
-            className="bg-[#16191D] text-white rounded-t-3xl rounded-b-none lg:rounded-3xl border-t border-x lg:border border-black/15 shadow-[0_-4px_16px_rgba(17,19,21,0.08)] overflow-hidden"
+            className="relative z-10 -mt-5 bg-[#16191D] text-white rounded-t-3xl rounded-b-none lg:rounded-3xl border-t border-x lg:border border-black/15 shadow-[0_-8px_22px_rgba(17,19,21,0.14)] overflow-hidden"
           >
             <button
               type="button"
@@ -838,7 +846,7 @@ export function PurchasesView({
                 Contacts
               </h2>
               <ChevronDown
-                className={`w-4 h-4 text-white/65 transition-transform duration-200 ${
+                className={`w-4 h-4 text-white/65 transition-transform duration-300 ${
                   contactsExpanded ? 'rotate-180' : ''
                 }`}
               />
@@ -850,14 +858,9 @@ export function PurchasesView({
                   initial={{ height: 0, opacity: 0 }}
                   animate={{ height: 'auto', opacity: 1 }}
                   exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+                  transition={{ duration: 0.3, ease: [0.42, 0, 0.58, 1] }}
                   onAnimationComplete={() => {
-                    if (contactsExpanded) {
-                      contactsSectionRef.current?.scrollIntoView({
-                        behavior: 'smooth',
-                        block: 'end',
-                      });
-                    }
+                    scrollToBottomOfPage();
                   }}
                   className="overflow-hidden"
                 >

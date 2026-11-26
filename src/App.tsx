@@ -229,9 +229,9 @@ export default function App() {
               onClick={() => setAddPurchaseOpen(true)}
               aria-label="Add tyre purchase"
               title="Add tyre purchase"
-              className="absolute left-3 w-10 h-10 rounded-full bg-[#111315] text-white shadow-[0_2px_8px_rgba(17,19,21,0.14)] hover:bg-black/85 active:scale-[0.96] transition-all flex items-center justify-center cursor-pointer"
+              className="absolute left-3.5 w-8 h-8 rounded-full bg-[#111315] text-white shadow-[0_2px_8px_rgba(17,19,21,0.14)] hover:bg-black/85 active:scale-[0.96] transition-all flex items-center justify-center cursor-pointer"
             >
-              <Plus className="w-4 h-4 text-white" />
+              <Plus className="w-3.5 h-3.5 text-white" />
             </button>
           )}
 
@@ -252,15 +252,15 @@ export default function App() {
             onClick={handleSwapCar}
             aria-label={`Switch car to ${otherCar.displayTitle}`}
             title={`Switch to ${otherCar.displayTitle}`}
-            className="absolute right-3 w-10 h-10 rounded-full bg-white border border-black/8 shadow-[0_2px_8px_rgba(17,19,21,0.04)] hover:bg-black/[0.02] active:scale-[0.96] transition-all flex items-center justify-center cursor-pointer"
+            className="absolute right-3.5 w-8 h-8 rounded-full bg-white border border-black/8 shadow-[0_2px_8px_rgba(17,19,21,0.04)] hover:bg-black/[0.02] active:scale-[0.96] transition-all flex items-center justify-center cursor-pointer"
           >
-            <ArrowLeftRight className="w-4 h-4 text-[#111315]" />
+            <ArrowLeftRight className="w-3.5 h-3.5 text-[#111315]" />
           </button>
         </div>
       </header>
 
       {activeTab === 'purchases' ? (
-        <main className="flex-1 flex flex-col w-full pb-[calc(3.5rem+env(safe-area-inset-bottom))]">
+        <main className="flex-1 flex flex-col w-full pb-[calc(3.5rem+max(0.75rem,env(safe-area-inset-bottom)))]">
           <PurchasesView
             car={carWithSortedLogs}
             contacts={contacts}

@@ -12,6 +12,7 @@ import {
 import {
   detectCurrentLocationName,
   formatCompactMonthDay,
+  formatDaysAgoLabel,
   formatDaysBetween,
   formatDisplayDate,
   formatRelativeDays,
@@ -181,14 +182,47 @@ export function PressureLogSheet({
       : car.pressureLogs.slice(0, PREVIEW_LIMIT);
   const remainingCount = Math.max(0, car.pressureLogs.length - PREVIEW_LIMIT);
 
-  const sectionClassName = expanded
-    ? showAllEntries
-      ? 'fixed inset-x-0 top-2 bottom-0 z-45 bg-white rounded-t-3xl border-t border-black/8 shadow-[0_-16px_48px_rgba(17,19,21,0.18)] flex flex-col pb-20 lg:inset-x-0 lg:top-12 lg:bottom-4 lg:max-w-2xl lg:mx-auto lg:rounded-3xl lg:border lg:shadow-2xl lg:pb-0'
-      : 'fixed inset-x-0 bottom-0 z-35 bg-white rounded-t-3xl border-t border-black/8 shadow-[0_-16px_48px_rgba(17,19,21,0.14)] max-h-[72dvh] flex flex-col pb-20 lg:static lg:z-auto lg:rounded-3xl lg:border lg:shadow-none lg:max-h-[560px] lg:pb-0'
-    : 'relative w-full bg-[#16191D] text-white rounded-t-3xl rounded-b-none lg:rounded-3xl border-t border-x lg:border border-black/15 shadow-[0_-4px_16px_rgba(17,19,21,0.08)] overflow-hidden shrink-0';
+  const expandedSheetClassName = showAllEntries
+    ? 'fixed inset-x-0 top-2 bottom-0 z-45 bg-white rounded-t-3xl border-t border-black/8 shadow-[0_-16px_48px_rgba(17,19,21,0.18)] flex flex-col pb-20 lg:inset-x-0 lg:top-12 lg:bottom-4 lg:max-w-2xl lg:mx-auto lg:rounded-3xl lg:border lg:shadow-2xl lg:pb-0'
+    : 'fixed inset-x-0 bottom-0 z-35 bg-white rounded-t-3xl border-t border-black/8 shadow-[0_-16px_48px_rgba(17,19,21,0.14)] max-h-[72dvh] flex flex-col pb-20 lg:inset-x-0 lg:bottom-20 lg:max-w-xl lg:mx-auto lg:rounded-3xl lg:border lg:shadow-2xl lg:max-h-[560px] lg:pb-0';
 
   return (
     <>
+      {/* Compact Black Summary Bar (always stays calmly in flow) */}
+      <section
+        aria-label="Tyre pressure log summary"
+        className="relative w-full bg-[#16191D] text-white rounded-t-3xl rounded-b-none lg:rounded-3xl border-t border-x lg:border border-black/15 shadow-[0_-4px_16px_rgba(17,19,21,0.08)] overflow-hidden shrink-0"
+      >
+        <button
+          type="button"
+          onClick={() => onToggleExpanded(true)}
+          className="w-full text-left px-4 py-2 cursor-pointer hover:bg-white/[0.03] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40 shrink-0"
+        >
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-baseline gap-2 min-w-0">
+              <h2 className="font-display text-base font-semibold text-white leading-none shrink-0">
+                Pressure Log
+              </h2>
+              {latestLog && (
+                <span className="font-sans text-xs font-light text-white/60 tabular-nums truncate">
+                  {formatDaysAgoLabel(latestLog.date)}
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2.5 shrink-0">
+              <span className="text-xs font-medium text-white/75 tabular-nums">
+                {latestLog ? formatCompactMonthDay(latestLog.date) : 'No entries'}
+              </span>
+              <span className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-white shrink-0">
+                <ChevronUp className="w-4 h-4" />
+              </span>
+            </div>
+          </div>
+        </button>
+      </section>
+
+      {/* Smooth Backdrop + Symmetrical Slide-Up / Slide-Down Expanded Sheet */}
       <AnimatePresence>
         {expanded && (
           <motion.div
@@ -196,95 +230,70 @@ export function PressureLogSheet({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.18 }}
+            transition={{ duration: 0.22 }}
             onClick={() => onToggleExpanded(false)}
             className={
               showAllEntries
                 ? 'fixed inset-0 z-30 bg-black/35'
-                : 'fixed inset-0 z-30 bg-black/25 lg:hidden'
+                : 'fixed inset-0 z-30 bg-black/25'
             }
           />
         )}
       </AnimatePresence>
 
-      <motion.section
-        layout
-        transition={{ type: 'spring', stiffness: 360, damping: 34 }}
-        aria-label="Tyre pressure log history"
-        className={sectionClassName}
-      >
-        {/* Top Bar: Compact Summary or Clean Expanded Header */}
-        {expanded ? (
-          <div className="w-full px-4 py-3 flex items-center justify-between gap-3 shrink-0">
-            <button
-              type="button"
-              onClick={() => onToggleExpanded(false)}
-              className="flex-1 min-w-0 text-left cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#111315] rounded-lg"
-            >
-              <h2 className="font-display text-base font-semibold text-[#111315]">
-                Pressure Log
-              </h2>
-            </button>
-
-            <div className="flex items-center gap-2 shrink-0">
-              {latestLog && (
-                <span className="text-xs font-medium text-[#5E646A] tabular-nums mr-0.5">
-                  {formatRelativeDays(latestLog.date)}
-                </span>
-              )}
-              <button
-                type="button"
-                onClick={handleOpenAdd}
-                aria-label="Add pressure entry"
-                title="Add pressure entry"
-                className="w-8 h-8 rounded-full bg-[#111315] text-white hover:bg-black/85 active:scale-[0.96] transition-all flex items-center justify-center shrink-0 cursor-pointer"
-              >
-                <Plus className="w-4 h-4" />
-              </button>
+      <AnimatePresence>
+        {expanded && (
+          <motion.section
+            key="log-sheet"
+            initial={{ y: '100%' }}
+            animate={{ y: 0 }}
+            exit={{ y: '100%' }}
+            transition={{ type: 'spring', stiffness: 360, damping: 36 }}
+            aria-label="Tyre pressure log history"
+            className={expandedSheetClassName}
+          >
+            {/* Clean Expanded Header */}
+            <div className="w-full px-4 py-3 flex items-center justify-between gap-3 shrink-0">
               <button
                 type="button"
                 onClick={() => onToggleExpanded(false)}
-                aria-label="Collapse pressure log"
-                title="Collapse pressure log"
-                className="w-8 h-8 rounded-full bg-[#F3F4F2] flex items-center justify-center text-[#111315] hover:bg-black/[0.06] active:scale-[0.96] transition-all shrink-0 cursor-pointer"
+                className="flex-1 min-w-0 text-left cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#111315] rounded-lg"
               >
-                <ChevronDown className="w-4 h-4" />
+                <h2 className="font-display text-base font-semibold text-[#111315]">
+                  Pressure Log
+                </h2>
               </button>
-            </div>
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => onToggleExpanded(true)}
-            className="w-full text-left px-4 py-2 cursor-pointer hover:bg-white/[0.03] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40 shrink-0"
-          >
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="font-display text-base font-semibold text-white leading-none truncate">
-                Pressure Log
-              </h2>
 
-              <div className="flex items-center gap-2.5 shrink-0">
-                <span className="text-xs font-medium text-white/70 tabular-nums">
-                  {latestLog ? formatCompactMonthDay(latestLog.date) : 'No entries'}
-                </span>
-                <span className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-white shrink-0">
-                  <ChevronUp className="w-4 h-4" />
-                </span>
+              <div className="flex items-center gap-2 shrink-0">
+                {latestLog && (
+                  <span className="text-xs font-medium text-[#5E646A] tabular-nums mr-0.5">
+                    {formatRelativeDays(latestLog.date)}
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={handleOpenAdd}
+                  aria-label="Add pressure entry"
+                  title="Add pressure entry"
+                  className="w-8 h-8 rounded-full bg-[#111315] text-white hover:bg-black/85 active:scale-[0.96] transition-all flex items-center justify-center shrink-0 cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onToggleExpanded(false)}
+                  aria-label="Collapse pressure log"
+                  title="Collapse pressure log"
+                  className="w-8 h-8 rounded-full bg-[#F3F4F2] flex items-center justify-center text-[#111315] hover:bg-black/[0.06] active:scale-[0.96] transition-all shrink-0 cursor-pointer"
+                >
+                  <ChevronDown className="w-4 h-4" />
+                </button>
               </div>
             </div>
-          </button>
-        )}
 
-        {/* Expanded History List */}
-        <AnimatePresence initial={false}>
-          {expanded && (
-            <motion.div
+            {/* Expanded History List */}
+            <div
               ref={scrollBodyRef}
-              key="log-body"
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 8 }}
-              transition={{ duration: 0.2 }}
               className="border-t border-black/6 flex-1 overflow-y-auto px-4 py-3 space-y-3"
             >
 
@@ -587,10 +596,10 @@ export function PressureLogSheet({
                   )}
                 </>
               )}
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </motion.section>
+            </div>
+          </motion.section>
+        )}
+      </AnimatePresence>
     </>
   );
 }

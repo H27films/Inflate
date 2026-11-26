@@ -574,13 +574,21 @@ export function PurchasesView({
             </div>
           </section>
 
-          {/* Purchase History Logs (Expanded by default, collapsible) */}
-          <section className="bg-white rounded-3xl border border-black/7 overflow-hidden">
+        </div>
+
+        {/* Bottom Stacked Drawers: Purchase log (Back) + Installation by Tyre (Middle) + Contacts (Front) */}
+        <div className="mt-3 sm:px-6">
+          {/* Purchase History Logs (Expanded by default, collapses down to stack above Installation by Tyre) */}
+          <section className="relative z-0 overflow-hidden transition-colors duration-300 rounded-t-3xl rounded-b-none bg-white border-t border-x border-black/7 shadow-[0_-4px_16px_rgba(17,19,21,0.04)]">
             <button
               type="button"
               onClick={() => setPurchaseLogExpanded((prev) => !prev)}
               aria-expanded={purchaseLogExpanded}
-              className="w-full px-4 sm:px-5 py-4 flex items-center justify-between gap-3 text-left hover:bg-black/[0.015] transition-colors cursor-pointer"
+              className={`w-full px-5 flex items-center justify-between gap-3 text-left transition-all duration-300 cursor-pointer ${
+                purchaseLogExpanded
+                  ? 'pt-4 pb-3 hover:bg-black/[0.015]'
+                  : 'pt-3.5 pb-8 hover:bg-black/[0.02]'
+              }`}
             >
               <h2 className="font-display text-base font-semibold text-[#111315]">
                 Purchase log
@@ -604,7 +612,7 @@ export function PurchasesView({
                   transition={{ duration: 0.28, ease: [0.42, 0, 0.58, 1] }}
                   className="overflow-hidden"
                 >
-                  <div className="px-4 sm:px-5 pb-4 sm:pb-5 border-t border-black/6 pt-2">
+                  <div className="px-5 pb-9 pt-1">
                     {sortedPurchases.length === 0 ? (
                       <div className="py-10 text-center text-sm text-[#6B7075]">
                         No tyre purchases recorded for {car.displayTitle}. Tap + above to log your set.
@@ -743,17 +751,13 @@ export function PurchasesView({
             </AnimatePresence>
           </section>
 
-        </div>
-
-        {/* Bottom Stacked Drawers: Installation by Tyre (Behind) + Contacts (Front) */}
-        <div className="mt-3 sm:px-6">
-          {/* Per-Corner Installed Tyres: Greyish Tab Behind Contacts -> White Expanded Drawer */}
+          {/* Per-Corner Installed Tyres: Greyish Tab Over Purchase log -> White Expanded Drawer */}
           <section
             ref={installationsSectionRef}
-            className={`relative z-0 scroll-mb-24 overflow-hidden transition-colors duration-300 rounded-t-3xl rounded-b-none ${
+            className={`relative z-10 -mt-5 scroll-mb-24 overflow-hidden transition-colors duration-300 rounded-t-3xl rounded-b-none ${
               installationsExpanded
-                ? 'bg-white border-t border-x border-black/7 shadow-[0_-4px_16px_rgba(17,19,21,0.04)]'
-                : 'bg-[#E2E4E0] text-[#111315]'
+                ? 'bg-white border-t border-x border-black/7 shadow-[0_-4px_16px_rgba(17,19,21,0.05)]'
+                : 'bg-[#E2E4E0] text-[#111315] shadow-[0_-2px_8px_rgba(17,19,21,0.04)]'
             }`}
           >
             <button
@@ -872,7 +876,7 @@ export function PurchasesView({
           {/* Collapsible Contacts Bar: Overlaps bottom of Installation by Tyre */}
           <section
             ref={contactsSectionRef}
-            className="relative z-10 -mt-5 bg-[#16191D] text-white rounded-t-3xl rounded-b-none lg:rounded-3xl border-t border-x lg:border border-black/15 shadow-[0_-2px_6px_rgba(17,19,21,0.05)] overflow-hidden"
+            className="relative z-20 -mt-5 bg-[#16191D] text-white rounded-t-3xl rounded-b-none lg:rounded-3xl border-t border-x lg:border border-black/15 shadow-[0_-2px_6px_rgba(17,19,21,0.05)] overflow-hidden"
           >
             <button
               type="button"

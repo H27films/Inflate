@@ -24,7 +24,7 @@ export const INITIAL_CONTACTS: TyreContact[] = [
 export const INITIAL_GARAGE: Record<CarId, CarProfile> = {
   slk250: {
     id: 'slk250',
-    displayTitle: 'Mercedes Benz',
+    displayTitle: 'Mercedes Benz SLK',
     make: 'Mercedes-Benz',
     model: 'SLK350',
     trim: 'WC428D',
@@ -216,6 +216,19 @@ export function formatCompactMonthDay(dateStr: string): string {
   const month = dt.toLocaleDateString('en-US', { month: 'short' });
   const day = dt.getDate();
   return `${month}-${day}`;
+}
+
+export function formatShortWeekday(dateStr: string): string {
+  const dt = parseLocalDate(dateStr);
+  return dt.toLocaleDateString('en-US', { weekday: 'short' });
+}
+
+export function formatWeekdayMonthDay(dateStr: string): string {
+  const dt = parseLocalDate(dateStr);
+  const weekday = dt.toLocaleDateString('en-US', { weekday: 'short' });
+  const month = dt.toLocaleDateString('en-US', { month: 'short' });
+  const day = dt.getDate();
+  return `${weekday} ${month} - ${day}`;
 }
 
 export function getDaysSince(dateStr: string): number {

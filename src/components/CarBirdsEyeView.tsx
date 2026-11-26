@@ -185,6 +185,105 @@ function processCarAsset(carId: CarId): Promise<string> {
   });
 }
 
+function WaveEnlargeText({
+  text,
+  className = '',
+}: {
+  text: string;
+  className?: string;
+}) {
+  const [hovered, setHovered] = useState(false);
+  const [pressed, setPressed] = useState(false);
+  const [activeCharIdx, setActiveCharIdx] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!pressed) return;
+    const timer = window.setTimeout(() => {
+      setPressed(false);
+    }, 900);
+    return () => window.clearTimeout(timer);
+  }, [pressed]);
+
+  const isActive = hovered || pressed;
+
+  // Split into words while keeping global character index so words never break mid-word
+  const tokens = text.split(/(\s+)/);
+  const totalChars = text.length;
+  let runningIdx = 0;
+
+  return (
+    <span
+      onPointerEnter={(e) => {
+        if (e.pointerType !== 'touch') setHovered(true);
+      }}
+      onPointerLeave={() => {
+        setHovered(false);
+        setPressed(false);
+        setActiveCharIdx(null);
+      }}
+      onPointerDown={() => setPressed(true)}
+      onPointerUp={(e) => {
+        if (e.pointerType !== 'touch') setPressed(false);
+      }}
+      onPointerCancel={() => setPressed(false)}
+      className={`inline-block cursor-pointer select-none ${className}`}
+    >
+      {tokens.map((token, tokenIdx) => {
+        if (/^\s+$/.test(token)) {
+          runningIdx += token.length;
+          return <span key={`ws-${tokenIdx}`}>{token}</span>;
+        }
+
+        const chars = Array.from(token);
+        const startIdx = runningIdx;
+        runningIdx += chars.length;
+
+        return (
+          <span key={`word-${tokenIdx}`} className="inline-block whitespace-nowrap">
+            {chars.map((char, offset) => {
+              const charIdx = startIdx + offset;
+              const dist =
+                activeCharIdx !== null ? Math.abs(charIdx - activeCharIdx) : null;
+              const targetScale = !isActive
+                ? 1
+                : dist === 0
+                  ? 1.34
+                  : dist === 1
+                    ? 1.24
+                    : 1.15;
+              const targetY = !isActive ? 0 : dist === 0 ? -2 : -1;
+
+              return (
+                <motion.span
+                  key={`c-${charIdx}`}
+                  onPointerEnter={(e) => {
+                    if (e.pointerType !== 'touch') setActiveCharIdx(charIdx);
+                  }}
+                  animate={{
+                    scale: targetScale,
+                    y: targetY,
+                  }}
+                  transition={{
+                    type: 'spring',
+                    stiffness: 460,
+                    damping: 22,
+                    delay: isActive
+                      ? charIdx * 0.02
+                      : Math.max(0, totalChars - 1 - charIdx) * 0.01,
+                  }}
+                  className="inline-block origin-bottom will-change-transform"
+                >
+                  {char}
+                </motion.span>
+              );
+            })}
+          </span>
+        );
+      })}
+    </span>
+  );
+}
+
 export function CarBirdsEyeView({
   car,
   selectedCorner,
@@ -295,11 +394,11 @@ export function CarBirdsEyeView({
             );
           })}
 
-          {/* Interactive Center Roof Hotspot for Insurance & Cartax */}
+          {/* Interactive Center Roof Hotspot for Insurance & Car Tax */}
           <button
             type="button"
             onClick={() => setRoofSelected((prev) => !prev)}
-            aria-label="Toggle insurance and cartax renewal dates"
+            aria-label="Toggle insurance and car tax renewal dates"
             aria-pressed={roofSelected}
             style={{ left: '50%', top: '52%' }}
             className="absolute -translate-x-1/2 -translate-y-1/2 w-14 h-20 flex items-center justify-center cursor-pointer focus:outline-none group"
@@ -327,9 +426,9 @@ export function CarBirdsEyeView({
                     top: '50%',
                     right: 'calc(85% + 18px)',
                   }}
-                  className="absolute -translate-y-1/2 text-right space-y-0.5 w-max max-w-[115px] sm:max-w-[165px]"
+                  className="absolute -translate-y-1/2 text-right space-y-0.5 w-max max-w-[125px] sm:max-w-[175px]"
                 >
-                  <p className="font-display text-[11px] sm:text-xs font-bold text-[#111315] leading-tight">
+                  <p className="font-display text-sm sm:text-[15px] font-bold text-[#111315] leading-tight">
                     Insurance
                   </p>
                   <button
@@ -352,15 +451,15 @@ export function CarBirdsEyeView({
                     top: '50%',
                     left: 'calc(85% + 18px)',
                   }}
-                  className="absolute -translate-y-1/2 text-left space-y-0.5 w-max max-w-[115px] sm:max-w-[165px]"
+                  className="absolute -translate-y-1/2 text-left space-y-0.5 w-max max-w-[125px] sm:max-w-[175px]"
                 >
-                  <p className="font-display text-[11px] sm:text-xs font-bold text-[#111315] leading-tight">
-                    Cartax
+                  <p className="font-display text-sm sm:text-[15px] font-bold text-[#111315] leading-tight">
+                    Car Tax
                   </p>
                   <button
                     type="button"
                     onClick={() => openEditRenewal('cartax', cartaxDate)}
-                    aria-label={`Edit cartax renewal date (${formatRenewalDate(cartaxDate)})`}
+                    aria-label={`Edit car tax renewal date (${formatRenewalDate(cartaxDate)})`}
                     className="font-sans text-[11px] sm:text-xs font-normal text-[#5E646A] hover:text-[#FF5A1F] active:scale-[0.98] transition-colors whitespace-nowrap leading-tight cursor-pointer underline decoration-black/20 underline-offset-2"
                   >
                     {formatRenewalDate(cartaxDate)}
@@ -391,7 +490,7 @@ export function CarBirdsEyeView({
                     ? { right: `calc(${100 - activeSpot.leftPct}% + 22px)` }
                     : { left: `calc(${activeSpot.leftPct}% + 22px)` }),
                 }}
-                className={`absolute -translate-y-1/2 pointer-events-none w-max max-w-[100px] sm:max-w-[165px] space-y-0.5 ${
+                className={`absolute -translate-y-1/2 z-10 w-max max-w-[100px] sm:max-w-[165px] space-y-0.5 ${
                   activeSpot.corner === 'FL' || activeSpot.corner === 'RL'
                     ? 'text-right'
                     : 'text-left'
@@ -400,24 +499,28 @@ export function CarBirdsEyeView({
                 {selectedInfo ? (
                   <>
                     <p className="font-display text-[11px] sm:text-xs font-bold text-[#111315] leading-tight">
-                      {selectedInfo.brandModel}
+                      <WaveEnlargeText text={selectedInfo.brandModel} />
                     </p>
-                    <p className="font-mono text-[10px] sm:text-[11px] font-medium text-[#5E646A] leading-tight">
-                      {selectedSize}
-                    </p>
+                    {selectedSize && (
+                      <p className="font-mono text-[10px] sm:text-[11px] font-medium text-[#5E646A] leading-tight">
+                        <WaveEnlargeText text={selectedSize} />
+                      </p>
+                    )}
                     {selectedUnitPrice !== null && (
                       <p className="font-mono text-[11px] sm:text-xs font-bold text-[#FF5A1F] tabular-nums leading-tight">
-                        {formatPrice(selectedUnitPrice)}
+                        <WaveEnlargeText text={formatPrice(selectedUnitPrice)} />
                       </p>
                     )}
                   </>
                 ) : (
                   <>
-                    <p className="font-mono text-[10px] sm:text-[11px] font-medium text-[#5E646A] leading-tight">
-                      {selectedSize}
-                    </p>
+                    {selectedSize && (
+                      <p className="font-mono text-[10px] sm:text-[11px] font-medium text-[#5E646A] leading-tight">
+                        <WaveEnlargeText text={selectedSize} />
+                      </p>
+                    )}
                     <p className="text-[10px] sm:text-[11px] text-[#8C9298] leading-tight">
-                      No purchase
+                      <WaveEnlargeText text="No purchase" />
                     </p>
                   </>
                 )}
@@ -450,7 +553,7 @@ export function CarBirdsEyeView({
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <h3 className="font-display text-base font-semibold text-[#111315]">
-                    {editingField === 'insurance' ? 'Insurance' : 'Cartax'} Renewal
+                    {editingField === 'insurance' ? 'Insurance' : 'Car Tax'} Renewal
                   </h3>
                   <p className="text-xs text-[#5E646A] mt-0.5">{car.displayTitle}</p>
                 </div>

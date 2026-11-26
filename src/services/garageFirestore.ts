@@ -112,6 +112,19 @@ export async function ensureUserGarageSeeded(uid: string): Promise<void> {
   }
 
   if (!existingCarsSnap.empty) {
+    for (const docSnap of existingCarsSnap.docs) {
+      const data = docSnap.data();
+      if (data.carKey === 'slk250' && data.displayTitle === 'Mercedes Benz') {
+        try {
+          await updateDoc(docSnap.ref, {
+            displayTitle: INITIAL_GARAGE.slk250.displayTitle,
+            updatedAt: serverTimestamp(),
+          });
+        } catch (error) {
+          handleFirestoreError(error, OperationType.UPDATE, `cars/${docSnap.id}`);
+        }
+      }
+    }
     return;
   }
 

@@ -13,8 +13,8 @@ import {
   TyreCorner,
 } from './types';
 import {
-  formatDisplayDate,
   formatTyreAgeMonths,
+  formatWeekdayMonthDay,
   getCornerPurchaseInfo,
   getDaysSince,
   INITIAL_GARAGE,
@@ -404,8 +404,8 @@ export default function App() {
               <div className="flex items-baseline justify-between gap-2">
                 <p className="text-xs text-[#5E646A] tabular-nums">
                   Last Top Up:{' '}
-                  <span className="font-medium text-[#111315]">
-                    {latestPressure ? formatDisplayDate(latestPressure.date) : '—'}
+                  <span>
+                    {latestPressure ? formatWeekdayMonthDay(latestPressure.date) : '—'}
                   </span>
                 </p>
                 {selectedCorner && (

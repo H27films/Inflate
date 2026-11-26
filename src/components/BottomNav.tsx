@@ -8,6 +8,7 @@ interface BottomNavProps {
   onSelectTab: (tab: ActiveTab) => void;
   onOpenLog: () => void;
   lightSurface?: boolean;
+  showBackdrop?: boolean;
 }
 
 function WheelIcon({
@@ -71,23 +72,25 @@ export function BottomNav({
   onSelectTab,
   onOpenLog,
   lightSurface = false,
+  showBackdrop,
 }: BottomNavProps) {
   const isGarage = activeTab === 'garage';
   const isPurchases = activeTab === 'purchases';
+  const renderBackdrop = showBackdrop ?? (lightSurface || isPurchases);
 
   return (
     <div
       aria-label="Primary navigation"
       className="fixed inset-x-0 bottom-0 z-40 pointer-events-none pb-[calc(0.65rem+env(safe-area-inset-bottom))] flex justify-center"
     >
-      {/* Frosted blur layer: preserved on expanded sheet and Past tab; seamless on collapsed Home */}
-      {(lightSurface || isPurchases) && (
+      {/* Frosted blur layer: preserved on expanded sheets/drawers; seamless when all collapsed */}
+      {renderBackdrop && (
         <div
           aria-hidden="true"
-          className={`absolute inset-0 backdrop-blur-xl transition-colors duration-200 ${
+          className={`absolute inset-0 backdrop-blur-xl transition-all duration-200 ${
             lightSurface
               ? 'bg-gradient-to-b from-white/70 via-white/92 to-[#EAECE8]/95'
-              : 'bg-gradient-to-t from-[#F3F4F2]/95 via-[#F3F4F2]/85 to-[#F3F4F2]/65'
+              : 'bg-gradient-to-t from-[#F3F4F2]/96 via-[#F3F4F2]/80 to-transparent [mask-image:linear-gradient(to_top,black_65%,transparent_100%)]'
           }`}
         />
       )}

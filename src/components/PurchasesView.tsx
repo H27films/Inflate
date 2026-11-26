@@ -27,6 +27,7 @@ interface PurchasesViewProps {
   onAddContact: (entry: Omit<TyreContact, 'id'>) => void;
   onUpdateContact: (id: string, entry: Omit<TyreContact, 'id'>) => void;
   onDeleteContact: (id: string) => void;
+  onExpandedChange?: (hasExpanded: boolean) => void;
 }
 
 function formatRM(amount: number): string {
@@ -314,11 +315,16 @@ export function PurchasesView({
   onAddContact,
   onUpdateContact,
   onDeleteContact,
+  onExpandedChange,
 }: PurchasesViewProps) {
   const [showContactModal, setShowContactModal] = useState(false);
   const [purchaseLogExpanded, setPurchaseLogExpanded] = useState(true);
   const [installationsExpanded, setInstallationsExpanded] = useState(false);
   const [contactsExpanded, setContactsExpanded] = useState(false);
+
+  useEffect(() => {
+    onExpandedChange?.(purchaseLogExpanded || installationsExpanded || contactsExpanded);
+  }, [purchaseLogExpanded, installationsExpanded, contactsExpanded, onExpandedChange]);
   const [editingContactId, setEditingContactId] = useState<string | null>(null);
   const [entryMode, setEntryMode] = useState<'details' | 'paste'>('details');
   const [pasteText, setPasteText] = useState('');
@@ -529,7 +535,7 @@ export function PurchasesView({
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.22 }}
-        className="flex-1 w-full max-w-5xl mx-auto flex flex-col justify-between pt-3 pb-0 lg:pb-6"
+        className="flex-1 w-full max-w-5xl mx-auto flex flex-col justify-between pt-3 pb-0"
       >
         <div className="px-4 sm:px-6 space-y-3">
           {/* Top Tyre Sizing Section on normal app background (no outer box) */}
@@ -577,9 +583,15 @@ export function PurchasesView({
         </div>
 
         {/* Bottom Stacked Drawers: Purchase log (Back) + Installation by Tyre (Middle) + Contacts (Front) */}
-        <div className="mt-3 sm:px-6">
+        <div className="mt-3 px-1.5 sm:px-3">
           {/* Purchase History Logs (Expanded by default, collapses down to stack above Installation by Tyre) */}
-          <section className="relative z-0 overflow-hidden transition-colors duration-300 rounded-t-3xl rounded-b-none bg-white border-t border-x border-black/7 shadow-[0_-4px_16px_rgba(17,19,21,0.04)]">
+          <section
+            className={`relative z-0 overflow-hidden transition-all duration-300 rounded-t-3xl rounded-b-none ring-1 ring-black/[0.05] ${
+              purchaseLogExpanded
+                ? 'bg-gradient-to-b from-white to-[#FAFAF9] shadow-[0_-4px_20px_rgba(17,19,21,0.06)]'
+                : 'bg-gradient-to-b from-white via-[#FBFBFA] to-[#F1F3EF] shadow-[0_-4px_18px_rgba(17,19,21,0.05)]'
+            }`}
+          >
             <button
               type="button"
               onClick={() => setPurchaseLogExpanded((prev) => !prev)}
@@ -590,7 +602,7 @@ export function PurchasesView({
                   : 'pt-3.5 pb-8 hover:bg-black/[0.02]'
               }`}
             >
-              <h2 className="font-display text-base font-semibold text-[#111315]">
+              <h2 className="font-display text-[15px] font-[450] text-[#111315]">
                 Purchase log
               </h2>
               <span className="inline-flex items-center gap-1.5 text-xs text-[#5E646A] tabular-nums">
@@ -751,13 +763,13 @@ export function PurchasesView({
             </AnimatePresence>
           </section>
 
-          {/* Per-Corner Installed Tyres: Greyish Tab Over Purchase log -> White Expanded Drawer */}
+          {/* Per-Corner Installed Tyres: Soft Gradient Stone Tab & Drawer */}
           <section
             ref={installationsSectionRef}
-            className={`relative z-10 -mt-5 scroll-mb-24 overflow-hidden transition-colors duration-300 rounded-t-3xl rounded-b-none ${
+            className={`relative z-10 -mt-5 scroll-mb-24 overflow-hidden transition-all duration-300 rounded-t-3xl rounded-b-none bg-gradient-to-b from-[#ECEEE9] via-[#E2E4DF] to-[#D6D9D4] text-[#111315] ring-1 ring-inset ring-white/60 ${
               installationsExpanded
-                ? 'bg-white border-t border-x border-black/7 shadow-[0_-4px_16px_rgba(17,19,21,0.05)]'
-                : 'bg-[#E2E4E0] text-[#111315] shadow-[0_-2px_8px_rgba(17,19,21,0.04)]'
+                ? 'shadow-[0_-6px_22px_-4px_rgba(17,19,21,0.09)]'
+                : 'shadow-[0_-6px_18px_-4px_rgba(17,19,21,0.08)]'
             }`}
           >
             <button
@@ -766,11 +778,11 @@ export function PurchasesView({
               aria-expanded={installationsExpanded}
               className={`w-full px-5 flex items-center justify-between gap-3 text-left transition-all duration-300 cursor-pointer ${
                 installationsExpanded
-                  ? 'pt-4 pb-3 hover:bg-black/[0.015]'
+                  ? 'pt-4 pb-3 hover:bg-black/[0.02]'
                   : 'pt-3.5 pb-8 hover:bg-black/[0.03]'
               }`}
             >
-              <h2 className="font-display text-base font-semibold text-[#111315]">
+              <h2 className="font-display text-[15px] font-[450] text-[#111315]">
                 Installation by Tyre
               </h2>
               <span className="inline-flex items-center gap-1.5 text-xs text-[#5E646A]">
@@ -851,7 +863,7 @@ export function PurchasesView({
                             type="button"
                             onClick={() => scrollToPurchase(info.id)}
                             aria-label={`Jump to ${CORNER_LABELS[corner]} purchase in purchase log`}
-                            className="p-3.5 rounded-2xl bg-[#F3F4F2] border border-black/5 text-left hover:bg-[#EAECE9] active:scale-[0.98] transition-all cursor-pointer"
+                            className="p-3.5 rounded-2xl bg-gradient-to-b from-[#FAFBF9] to-[#F3F4F2] border border-white/85 ring-1 ring-black/[0.04] shadow-[0_2px_8px_rgba(17,19,21,0.04)] text-left hover:from-white hover:to-[#F8F9F7] active:scale-[0.98] transition-all cursor-pointer"
                           >
                             {cardInner}
                           </button>
@@ -861,7 +873,7 @@ export function PurchasesView({
                       return (
                         <div
                           key={corner}
-                          className="p-3.5 rounded-2xl bg-[#F3F4F2] border border-black/5"
+                          className="p-3.5 rounded-2xl bg-gradient-to-b from-[#FAFBF9] to-[#F3F4F2] border border-white/85 ring-1 ring-black/[0.04] shadow-[0_2px_8px_rgba(17,19,21,0.04)]"
                         >
                           {cardInner}
                         </div>
@@ -873,18 +885,18 @@ export function PurchasesView({
             </AnimatePresence>
           </section>
 
-          {/* Collapsible Contacts Bar: Overlaps bottom of Installation by Tyre */}
+          {/* Collapsible Contacts Card: Rounded All Corners, Dark Graphite Gradient Over Installation */}
           <section
             ref={contactsSectionRef}
-            className="relative z-20 -mt-5 bg-[#16191D] text-white rounded-t-3xl rounded-b-none lg:rounded-3xl border-t border-x lg:border border-black/15 shadow-[0_-2px_6px_rgba(17,19,21,0.05)] overflow-hidden"
+            className="relative z-20 -mt-5 bg-gradient-to-br from-[#272B33] via-[#1B1E24] to-[#121418] text-white rounded-3xl ring-1 ring-inset ring-white/12 shadow-[0_-6px_20px_-6px_rgba(17,19,21,0.16),0_14px_28px_-10px_rgba(17,19,21,0.26)] overflow-hidden"
           >
             <button
               type="button"
               onClick={() => setContactsExpanded((prev) => !prev)}
               aria-expanded={contactsExpanded}
-              className="w-full px-5 py-4 flex items-center justify-between gap-3 text-left hover:bg-white/[0.03] transition-colors cursor-pointer"
+              className="w-full px-5 py-4 flex items-center justify-between gap-3 text-left hover:bg-white/[0.04] transition-colors cursor-pointer"
             >
-              <h2 className="font-display text-base font-semibold text-white">
+              <h2 className="font-display text-[15px] font-[450] text-white">
                 Contacts
               </h2>
               <ChevronDown

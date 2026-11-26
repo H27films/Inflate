@@ -64,6 +64,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('garage');
   const [selectedCorner, setSelectedCorner] = useState<TyreCorner | null>(null);
   const [logExpanded, setLogExpanded] = useState(false);
+  const [purchasesExpanded, setPurchasesExpanded] = useState(true);
   const [logModalOpen, setLogModalOpen] = useState(false);
   const [addPurchaseOpen, setAddPurchaseOpen] = useState(false);
 
@@ -382,19 +383,28 @@ export default function App() {
       </header>
 
       {activeTab === 'purchases' ? (
-        <main className="flex-1 flex flex-col w-full pb-[calc(4.7rem+env(safe-area-inset-bottom))]">
-          <PurchasesView
-            car={carWithSortedLogs}
-            contacts={contacts}
-            addModalOpen={addPurchaseOpen}
-            onCloseAddModal={() => setAddPurchaseOpen(false)}
-            onAddPurchase={handleAddPurchase}
-            onDeletePurchase={handleDeletePurchase}
-            onAddContact={handleAddContact}
-            onUpdateContact={handleUpdateContact}
-            onDeleteContact={handleDeleteContact}
-          />
-        </main>
+        <>
+          {!purchasesExpanded && (
+            <div
+              aria-hidden="true"
+              className="pointer-events-none fixed inset-x-0 bottom-0 h-52 z-0 bg-gradient-to-b from-transparent via-[#E5E8E2]/80 to-[#CFD4CC]"
+            />
+          )}
+          <main className="relative z-10 flex-1 flex flex-col w-full pb-[calc(4.5rem+env(safe-area-inset-bottom))]">
+            <PurchasesView
+              car={carWithSortedLogs}
+              contacts={contacts}
+              addModalOpen={addPurchaseOpen}
+              onCloseAddModal={() => setAddPurchaseOpen(false)}
+              onAddPurchase={handleAddPurchase}
+              onDeletePurchase={handleDeletePurchase}
+              onAddContact={handleAddContact}
+              onUpdateContact={handleUpdateContact}
+              onDeleteContact={handleDeleteContact}
+              onExpandedChange={setPurchasesExpanded}
+            />
+          </main>
+        </>
       ) : (
         /* Single-page zero-scroll Home layout */
         <>
@@ -529,6 +539,7 @@ export default function App() {
       <BottomNav
         activeTab={activeTab}
         lightSurface={logExpanded}
+        showBackdrop={activeTab === 'purchases' ? purchasesExpanded : logExpanded}
         onSelectTab={(tab) => {
           setLogExpanded(false);
           setActiveTab(tab);

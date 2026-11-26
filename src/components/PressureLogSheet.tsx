@@ -200,7 +200,7 @@ export function PressureLogSheet({
         >
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-baseline gap-2 min-w-0">
-              <h2 className="font-display text-[15px] font-medium tracking-tight text-white leading-none shrink-0">
+              <h2 className="font-display text-[15px] font-[450] tracking-tight text-white leading-none shrink-0">
                 Pressure Log
               </h2>
               {latestLog && (
@@ -259,7 +259,7 @@ export function PressureLogSheet({
                 onClick={() => onToggleExpanded(false)}
                 className="flex-1 min-w-0 text-left cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#111315] rounded-lg"
               >
-                <h2 className="font-display text-base font-semibold text-[#111315]">
+                <h2 className="font-display text-[15px] font-[450] text-[#111315]">
                   Pressure Log
                 </h2>
               </button>

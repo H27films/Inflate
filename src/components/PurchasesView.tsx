@@ -5,6 +5,7 @@ import {
   CarProfile,
   CORNER_LABELS,
   PurchaseLogEntry,
+  SavedTyreOption,
   TYRE_CORNERS,
   TyreContact,
   TyreCorner,
@@ -16,6 +17,7 @@ import {
   getTodayIso,
   parseLocalDate,
 } from '../data/initialGarage';
+import { SavedTyresCarousel } from './SavedTyresCarousel';
 
 interface PurchasesViewProps {
   car: CarProfile;
@@ -27,6 +29,10 @@ interface PurchasesViewProps {
   onAddContact: (entry: Omit<TyreContact, 'id'>) => void;
   onUpdateContact: (id: string, entry: Omit<TyreContact, 'id'>) => void;
   onDeleteContact: (id: string) => void;
+  savedTyresRulesPending?: boolean;
+  onAddSavedTyre: (entry: Omit<SavedTyreOption, 'id'>) => Promise<void> | void;
+  onUpdateSavedTyre: (id: string, entry: Omit<SavedTyreOption, 'id'>) => Promise<void> | void;
+  onDeleteSavedTyre: (id: string) => Promise<void> | void;
   onExpandedChange?: (hasExpanded: boolean) => void;
 }
 
@@ -315,6 +321,10 @@ export function PurchasesView({
   onAddContact,
   onUpdateContact,
   onDeleteContact,
+  savedTyresRulesPending = false,
+  onAddSavedTyre,
+  onUpdateSavedTyre,
+  onDeleteSavedTyre,
   onExpandedChange,
 }: PurchasesViewProps) {
   const [showContactModal, setShowContactModal] = useState(false);
@@ -322,9 +332,12 @@ export function PurchasesView({
   const [installationsExpanded, setInstallationsExpanded] = useState(false);
   const [contactsExpanded, setContactsExpanded] = useState(false);
 
+  const allCollapsed =
+    !purchaseLogExpanded && !installationsExpanded && !contactsExpanded;
+
   useEffect(() => {
-    onExpandedChange?.(purchaseLogExpanded || installationsExpanded || contactsExpanded);
-  }, [purchaseLogExpanded, installationsExpanded, contactsExpanded, onExpandedChange]);
+    onExpandedChange?.(!allCollapsed);
+  }, [allCollapsed, onExpandedChange]);
   const [editingContactId, setEditingContactId] = useState<string | null>(null);
   const [entryMode, setEntryMode] = useState<'details' | 'paste'>('details');
   const [pasteText, setPasteText] = useState('');
@@ -581,6 +594,20 @@ export function PurchasesView({
           </section>
 
         </div>
+
+        {/* Middle Horizontal Wheel & Tyre Showcase when all 3 drawers are collapsed */}
+        <AnimatePresence initial={false}>
+          {allCollapsed && (
+            <SavedTyresCarousel
+              car={car}
+              tyres={car.savedTyres ?? []}
+              rulesPending={savedTyresRulesPending}
+              onAddTyre={onAddSavedTyre}
+              onUpdateTyre={onUpdateSavedTyre}
+              onDeleteTyre={onDeleteSavedTyre}
+            />
+          )}
+        </AnimatePresence>
 
         {/* Bottom Stacked Drawers: Purchase log (Back) + Installation by Tyre (Middle) + Contacts (Front) */}
         <div className="mt-3 px-1.5 sm:px-3">

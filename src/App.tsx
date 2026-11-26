@@ -8,6 +8,7 @@ import {
   CORNER_LABELS,
   PressureLogEntry,
   PurchaseLogEntry,
+  SavedTyreOption,
   TYRE_CORNERS,
   TyreContact,
   TyreCorner,
@@ -24,14 +25,17 @@ import {
   addContactRecord,
   addPressureLogRecord,
   addPurchaseLogRecord,
+  addSavedTyreRecord,
   deleteContactRecord,
   deletePressureLogRecord,
   deletePurchaseLogRecord,
+  deleteSavedTyreRecord,
   ensureUserGarageSeeded,
   subscribeToUserGarage,
   updateCarRenewalsRecord,
   updateContactRecord,
   updatePressureLogRecord,
+  updateSavedTyreRecord,
 } from './services/garageFirestore';
 import { CarBirdsEyeView } from './components/CarBirdsEyeView';
 import { PressureLogSheet } from './components/PressureLogSheet';
@@ -58,6 +62,12 @@ export default function App() {
     slk250: [],
     fortuner: [],
   });
+  const [savedTyresByCar, setSavedTyresByCar] = useState<Record<CarId, SavedTyreOption[]>>({
+    slk250: [],
+    fortuner: [],
+  });
+  const [savedTyresSynced, setSavedTyresSynced] = useState(false);
+  const [savedTyresRulesPending, setSavedTyresRulesPending] = useState(false);
   const [contacts, setContacts] = useState<TyreContact[]>([]);
 
   const [activeCarId, setActiveCarId] = useState<CarId>('slk250');
@@ -86,6 +96,9 @@ export default function App() {
       setCarsMeta({});
       setPressureLogsByCar({ slk250: [], fortuner: [] });
       setPurchaseLogsByCar({ slk250: [], fortuner: [] });
+      setSavedTyresByCar({ slk250: [], fortuner: [] });
+      setSavedTyresSynced(false);
+      setSavedTyresRulesPending(false);
       setContacts([]);
       setHydratingData(false);
       return;
@@ -130,6 +143,13 @@ export default function App() {
             contactsLoaded = true;
             markLoaded();
           },
+          onSavedTyres: (grouped, hasDocs) => {
+            setSavedTyresByCar(grouped);
+            setSavedTyresSynced(hasDocs);
+          },
+          onSavedTyresRulesPending: (pending) => {
+            setSavedTyresRulesPending(pending);
+          },
           onError: (err) => {
             setFatalError(err);
           },
@@ -168,6 +188,11 @@ export default function App() {
         }),
         pressureLogs: pressureLogsByCar[carId],
         purchaseLogs: purchaseLogsByCar[carId],
+        savedTyres: savedTyresSynced
+          ? savedTyresByCar[carId]
+          : savedTyresRulesPending
+            ? fallback.savedTyres ?? []
+            : savedTyresByCar[carId],
       };
     };
 
@@ -175,7 +200,7 @@ export default function App() {
       slk250: buildCar('slk250'),
       fortuner: buildCar('fortuner'),
     };
-  }, [carsMeta, pressureLogsByCar, purchaseLogsByCar]);
+  }, [carsMeta, pressureLogsByCar, purchaseLogsByCar, savedTyresByCar, savedTyresSynced, savedTyresRulesPending]);
 
   const handleGoogleSignIn = async () => {
     if (signingIn) return;
@@ -317,6 +342,14 @@ export default function App() {
     runFirestoreAction(deleteContactRecord(id));
   };
 
+  const handleAddSavedTyre = (entry: Omit<SavedTyreOption, 'id'>) =>
+    addSavedTyreRecord(user.uid, activeCarId, entry);
+
+  const handleUpdateSavedTyre = (id: string, entry: Omit<SavedTyreOption, 'id'>) =>
+    updateSavedTyreRecord(id, activeCarId, entry);
+
+  const handleDeleteSavedTyre = (id: string) => deleteSavedTyreRecord(id);
+
   const handleUpdateRenewal = (field: keyof CarRenewals, date: string) => {
     const fallbackRenewals = INITIAL_GARAGE[activeCarId].renewals ?? {
       insurance: '2027-01-10',
@@ -401,6 +434,10 @@ export default function App() {
               onAddContact={handleAddContact}
               onUpdateContact={handleUpdateContact}
               onDeleteContact={handleDeleteContact}
+              savedTyresRulesPending={savedTyresRulesPending}
+              onAddSavedTyre={handleAddSavedTyre}
+              onUpdateSavedTyre={handleUpdateSavedTyre}
+              onDeleteSavedTyre={handleDeleteSavedTyre}
               onExpandedChange={setPurchasesExpanded}
             />
           </main>

@@ -22,9 +22,12 @@ import {
   CornerPressures,
   PressureLogEntry,
   PurchaseLogEntry,
+  SavedTyreOption,
   TYRE_CORNERS,
+  TyreAxle,
   TyreContact,
   TyreCorner,
+  WheelImageKey,
 } from '../types';
 
 const LEGACY_GARAGE_STORAGE_KEY = 'inflate_garage_v5';
@@ -136,6 +139,7 @@ export async function ensureUserGarageSeeded(uid: string): Promise<void> {
         }
       }
     }
+    await seedSavedTyresIfEmpty(uid);
     return;
   }
 
@@ -257,6 +261,63 @@ export async function ensureUserGarageSeeded(uid: string): Promise<void> {
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, 'pressureLogs/purchaseLogs/contacts');
   }
+
+  await seedSavedTyresIfEmpty(uid);
+}
+
+const VALID_WHEEL_KEYS: WheelImageKey[] = [
+  'sport-5spoke',
+  'mesh-split',
+  'turbine-dark',
+  'all-terrain',
+];
+
+function sanitizeWheelKey(val: unknown): WheelImageKey {
+  return VALID_WHEEL_KEYS.includes(val as WheelImageKey)
+    ? (val as WheelImageKey)
+    : 'sport-5spoke';
+}
+
+function sanitizeAxle(val: unknown): TyreAxle {
+  return val === 'Back' ? 'Back' : 'Front';
+}
+
+async function seedSavedTyresIfEmpty(uid: string): Promise<void> {
+  try {
+    const existingTyresSnap = await getDocs(
+      query(collection(db, 'savedTyres'), where('ownerId', '==', uid))
+    );
+    if (!existingTyresSnap.empty) return;
+
+    const batch = writeBatch(db);
+    const carIds: CarId[] = ['slk250', 'fortuner'];
+    for (const carId of carIds) {
+      const carDocId = makeDocId(uid, carId);
+      const starterTyres = INITIAL_GARAGE[carId].savedTyres ?? [];
+      for (const tyre of starterTyres) {
+        const ref = doc(db, 'savedTyres', makeDocId(uid, tyre.id));
+        const cleanNotes = sanitizeOptionalString(tyre.notes, 300);
+        const docData: Record<string, unknown> = {
+          ownerId: uid,
+          carId,
+          carDocId,
+          brandModel: tyre.brandModel.slice(0, 120),
+          price: Math.max(0, Math.min(100000, Number(tyre.price) || 0)),
+          axle: sanitizeAxle(tyre.axle),
+          tyreSize: tyre.tyreSize.slice(0, 80),
+          wheelImageKey: sanitizeWheelKey(tyre.wheelImageKey),
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        };
+        if (cleanNotes) docData.notes = cleanNotes;
+        batch.set(ref, docData);
+      }
+    }
+    await batch.commit();
+  } catch (error) {
+    // Non-fatal if live Firestore rules have not been updated for /savedTyres yet
+    console.warn('Saved tyres seed skipped until Firestore rules allow /savedTyres:', error);
+  }
 }
 
 export interface GarageSubscriptionsCallbacks {
@@ -264,6 +325,8 @@ export interface GarageSubscriptionsCallbacks {
   onPressureLogs: (logsByCar: Record<CarId, PressureLogEntry[]>) => void;
   onPurchaseLogs: (purchasesByCar: Record<CarId, PurchaseLogEntry[]>) => void;
   onContacts: (contacts: TyreContact[]) => void;
+  onSavedTyres?: (tyresByCar: Record<CarId, SavedTyreOption[]>, syncedFromDb: boolean) => void;
+  onSavedTyresRulesPending?: (pending: boolean) => void;
   onError: (err: Error) => void;
 }
 
@@ -414,11 +477,55 @@ export function subscribeToUserGarage(
     }
   );
 
+  const unsubSavedTyres = onSnapshot(
+    query(collection(db, 'savedTyres'), where('ownerId', '==', uid)),
+    (snap) => {
+      const grouped: Record<CarId, SavedTyreOption[]> = { slk250: [], fortuner: [] };
+      const sortMeta = new Map<string, number>();
+      snap.forEach((docSnap) => {
+        const d = docSnap.data();
+        const carId = d.carId as CarId;
+        if (carId !== 'slk250' && carId !== 'fortuner') return;
+        const createdMillis =
+          typeof d.createdAt?.toMillis === 'function' ? d.createdAt.toMillis() : 0;
+        sortMeta.set(docSnap.id, createdMillis);
+        grouped[carId].push({
+          id: docSnap.id,
+          brandModel: String(d.brandModel ?? 'Tyre'),
+          price: Number(d.price ?? 0),
+          axle: sanitizeAxle(d.axle),
+          tyreSize: String(d.tyreSize ?? INITIAL_GARAGE[carId].defaultSizes.front),
+          wheelImageKey: sanitizeWheelKey(d.wheelImageKey),
+          ...(d.notes ? { notes: String(d.notes) } : {}),
+        });
+      });
+      const sortItems = (list: SavedTyreOption[]) =>
+        list.sort((a, b) => (sortMeta.get(a.id) ?? 0) - (sortMeta.get(b.id) ?? 0) || a.id.localeCompare(b.id));
+      sortItems(grouped.slk250);
+      sortItems(grouped.fortuner);
+      callbacks.onSavedTyresRulesPending?.(false);
+      callbacks.onSavedTyres?.(grouped, !snap.empty);
+    },
+    (error) => {
+      const msg = error instanceof Error ? error.message : String(error);
+      if (msg.toLowerCase().includes('permission')) {
+        callbacks.onSavedTyresRulesPending?.(true);
+        return;
+      }
+      try {
+        handleFirestoreError(error, OperationType.LIST, 'savedTyres');
+      } catch (wrapped) {
+        callbacks.onError(wrapped as Error);
+      }
+    }
+  );
+
   return () => {
     unsubCars();
     unsubPressure();
     unsubPurchases();
     unsubContacts();
+    unsubSavedTyres();
   };
 }
 
@@ -612,5 +719,69 @@ export async function updateCarRenewalsRecord(
     });
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, path);
+  }
+}
+
+export async function addSavedTyreRecord(
+  uid: string,
+  carId: CarId,
+  entry: Omit<SavedTyreOption, 'id'>
+): Promise<void> {
+  const id = makeDocId(uid, `tyre-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`);
+  const path = `savedTyres/${id}`;
+  const cleanNotes = sanitizeOptionalString(entry.notes, 300);
+
+  const payload: Record<string, unknown> = {
+    ownerId: uid,
+    carId,
+    carDocId: makeDocId(uid, carId),
+    brandModel: (entry.brandModel.trim() || 'Tyre Option').slice(0, 120),
+    price: Math.max(0, Math.min(100000, Number(entry.price) || 0)),
+    axle: sanitizeAxle(entry.axle),
+    tyreSize: (entry.tyreSize.trim() || INITIAL_GARAGE[carId].defaultSizes.front).slice(0, 80),
+    wheelImageKey: sanitizeWheelKey(entry.wheelImageKey),
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+  if (cleanNotes) payload.notes = cleanNotes;
+
+  try {
+    await setDoc(doc(db, 'savedTyres', id), payload);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, path);
+  }
+}
+
+export async function updateSavedTyreRecord(
+  id: string,
+  carId: CarId,
+  entry: Omit<SavedTyreOption, 'id'>
+): Promise<void> {
+  const path = `savedTyres/${id}`;
+  const cleanNotes = sanitizeOptionalString(entry.notes, 300);
+
+  const updates: Record<string, unknown | FieldValue> = {
+    brandModel: (entry.brandModel.trim() || 'Tyre Option').slice(0, 120),
+    price: Math.max(0, Math.min(100000, Number(entry.price) || 0)),
+    axle: sanitizeAxle(entry.axle),
+    tyreSize: (entry.tyreSize.trim() || INITIAL_GARAGE[carId].defaultSizes.front).slice(0, 80),
+    wheelImageKey: sanitizeWheelKey(entry.wheelImageKey),
+    notes: cleanNotes ?? deleteField(),
+    updatedAt: serverTimestamp(),
+  };
+
+  try {
+    await updateDoc(doc(db, 'savedTyres', id), updates);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, path);
+  }
+}
+
+export async function deleteSavedTyreRecord(id: string): Promise<void> {
+  const path = `savedTyres/${id}`;
+  try {
+    await deleteDoc(doc(db, 'savedTyres', id));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
   }
 }

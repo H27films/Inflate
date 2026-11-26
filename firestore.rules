@@ -99,6 +99,19 @@ service cloud.firestore {
         && c.hasOnly(['FL', 'FR', 'RL', 'RR']);
     }
 
+    function isValidAxle(val) {
+      return val is string && (val == 'Front' || val == 'Back');
+    }
+
+    function isValidWheelImageKey(val) {
+      return val is string && (
+        val == 'sport-5spoke' ||
+        val == 'mesh-split' ||
+        val == 'turbine-dark' ||
+        val == 'all-terrain'
+      );
+    }
+
     function ownsParentCar(carDocId) {
       return isValidId(carDocId)
         && exists(/databases/$(database)/documents/cars/$(carDocId))
@@ -191,6 +204,28 @@ service cloud.firestore {
         && isOptionalString(data, 'website', 300)
         && isOptionalString(data, 'phone', 40)
         && isOptionalString(data, 'notes', 500)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSavedTyreDoc(data) {
+      return data.keys().hasAll([
+          'ownerId', 'carId', 'carDocId', 'brandModel', 'price',
+          'axle', 'tyreSize', 'wheelImageKey', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'carId', 'carDocId', 'brandModel', 'price',
+          'axle', 'tyreSize', 'wheelImageKey', 'notes', 'createdAt', 'updatedAt'
+        ])
+        && data.ownerId == request.auth.uid
+        && isValidCarKey(data.carId)
+        && isValidId(data.carDocId)
+        && data.brandModel is string && data.brandModel.size() >= 1 && data.brandModel.size() <= 120
+        && data.price is number && data.price >= 0 && data.price <= 100000
+        && isValidAxle(data.axle)
+        && data.tyreSize is string && data.tyreSize.size() >= 1 && data.tyreSize.size() <= 80
+        && isValidWheelImageKey(data.wheelImageKey)
+        && isOptionalString(data, 'notes', 300)
         && data.createdAt is timestamp
         && data.updatedAt is timestamp;
     }
@@ -288,6 +323,30 @@ service cloud.firestore {
           'company', 'website', 'phone', 'notes', 'updatedAt'
         ]);
       allow delete: if isValidId(contactId) && isOwner(existing().ownerId);
+    }
+
+    match /savedTyres/{tyreId} {
+      allow get: if isValidId(tyreId) && isOwner(existing().ownerId);
+      allow list: if isSignedIn() && existing().ownerId == request.auth.uid;
+      allow create: if isSignedIn()
+        && isValidId(tyreId)
+        && isValidSavedTyreDoc(incoming())
+        && ownsParentCar(incoming().carDocId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isSignedIn()
+        && isValidId(tyreId)
+        && isOwner(existing().ownerId)
+        && isValidSavedTyreDoc(incoming())
+        && incoming().ownerId == existing().ownerId
+        && incoming().carId == existing().carId
+        && incoming().carDocId == existing().carDocId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'brandModel', 'price', 'axle', 'tyreSize', 'wheelImageKey', 'notes', 'updatedAt'
+        ]);
+      allow delete: if isValidId(tyreId) && isOwner(existing().ownerId);
     }
 
     // Default deny for everything else

@@ -299,6 +299,74 @@
         }
       },
       "required": ["ownerId", "company", "createdAt", "updatedAt"]
+    },
+    "SavedTyre": {
+      "title": "SavedTyre",
+      "description": "A saved tyre option and per-tyre price quote associated with a vehicle and axle.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the saved tyre owner."
+        },
+        "carId": {
+          "type": "string",
+          "enum": ["slk250", "fortuner"]
+        },
+        "carDocId": {
+          "type": "string",
+          "description": "Document ID of the parent car document in /cars."
+        },
+        "brandModel": {
+          "type": "string",
+          "maxLength": 120,
+          "description": "Tyre brand and model name."
+        },
+        "price": {
+          "type": "number",
+          "description": "Per-tyre price in RM."
+        },
+        "axle": {
+          "type": "string",
+          "enum": ["Front", "Back"],
+          "description": "Whether the tyre fits the Front or Back axle."
+        },
+        "tyreSize": {
+          "type": "string",
+          "maxLength": 80,
+          "description": "Tyre size specification."
+        },
+        "wheelImageKey": {
+          "type": "string",
+          "enum": ["sport-5spoke", "mesh-split", "turbine-dark", "all-terrain"],
+          "description": "Selected studio wheel image style key."
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 300,
+          "description": "Optional note or workshop quote reference."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "ownerId",
+        "carId",
+        "carDocId",
+        "brandModel",
+        "price",
+        "axle",
+        "tyreSize",
+        "wheelImageKey",
+        "createdAt",
+        "updatedAt"
+      ]
     }
   },
   "firestore": {
@@ -317,6 +385,10 @@
     "/contacts/{contactId}": {
       "schema": { "$ref": "#/entities/TyreContact" },
       "description": "Tyre shop contacts table owned by the authenticated user."
+    },
+    "/savedTyres/{tyreId}": {
+      "schema": { "$ref": "#/entities/SavedTyre" },
+      "description": "Saved tyre options and price quotes owned by the authenticated user."
     }
   }
 }

@@ -51,6 +51,24 @@ export interface CarRenewals {
   coolant?: string; // YYYY-MM-DD (SLK only)
 }
 
+export type WheelImageKey =
+  | 'sport-5spoke'
+  | 'mesh-split'
+  | 'turbine-dark'
+  | 'all-terrain';
+
+export type TyreAxle = 'Front' | 'Back';
+
+export interface SavedTyreOption {
+  id: string;
+  brandModel: string;
+  price: number;
+  axle: TyreAxle;
+  tyreSize: string;
+  wheelImageKey: WheelImageKey;
+  notes?: string;
+}
+
 export interface CarProfile {
   id: CarId;
   displayTitle: string;
@@ -70,6 +88,7 @@ export interface CarProfile {
   renewals?: CarRenewals;
   pressureLogs: PressureLogEntry[];
   purchaseLogs: PurchaseLogEntry[];
+  savedTyres?: SavedTyreOption[];
 }
 
 export interface PhotoAnalysisResult {

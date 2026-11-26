@@ -10,7 +10,7 @@ interface BottomNavProps {
 }
 
 function WheelIcon({
-  className = 'w-[24px] h-[24px]',
+  className = 'w-[27px] h-[27px]',
 }: {
   className?: string;
 }) {
@@ -67,66 +67,96 @@ function WheelIcon({
 
 export function BottomNav({ activeTab, onSelectTab, onOpenLog }: BottomNavProps) {
   return (
-    <nav
+    <footer
       aria-label="Primary navigation"
-      className="fixed bottom-[max(0.65rem,env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 z-40"
+      className="fixed bottom-0 left-0 right-0 z-40 bg-gradient-to-b from-[#ECEDEA]/95 to-[#DFE1DD]/95 backdrop-blur-md pt-1.5 pb-[calc(0.375rem+env(safe-area-inset-bottom))] flex justify-center"
     >
-      <div className="rounded-full bg-[#ECEEEB]/95 backdrop-blur-md border border-black/8 shadow-[0_8px_24px_rgba(17,19,21,0.10)] p-1.5 flex items-center gap-1.5">
+      <nav className="relative inline-grid grid-cols-3 gap-10 sm:gap-12 px-1.5 pt-1">
+        {/* Outer capsule surrounding only the circular icons */}
+        <div
+          aria-hidden="true"
+          className="absolute inset-x-0 top-0 h-[48px] rounded-full bg-[#F5F6F4] border border-black/8 shadow-[0_2px_8px_rgba(17,19,21,0.06)] pointer-events-none"
+        />
+
         <button
           type="button"
           onClick={() => onSelectTab('garage')}
           aria-label="Home"
-          title="Home"
           aria-current={activeTab === 'garage' ? 'page' : undefined}
-          className="relative w-10 h-10 rounded-full hover:bg-black/[0.04] flex items-center justify-center transition-colors cursor-pointer"
+          className="relative z-10 flex flex-col items-center gap-2 group cursor-pointer"
         >
-          {activeTab === 'garage' && (
-            <motion.span
-              layoutId="bottom-nav-active-circle"
-              transition={{ type: 'spring', stiffness: 420, damping: 32 }}
-              className="absolute inset-0 rounded-full bg-[#111315] shadow-[0_2px_8px_rgba(17,19,21,0.18)]"
+          <span className="relative w-10 h-10 rounded-full group-hover:bg-black/[0.04] flex items-center justify-center transition-colors">
+            {activeTab === 'garage' && (
+              <motion.span
+                layoutId="bottom-nav-active-circle"
+                transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                className="absolute inset-0 rounded-full bg-[#111315] shadow-[0_2px_8px_rgba(17,19,21,0.18)]"
+              />
+            )}
+            <Home
+              className={`relative z-10 w-[18px] h-[18px] transition-colors ${
+                activeTab === 'garage' ? 'text-white' : 'text-[#6B7075]'
+              }`}
+              strokeWidth={activeTab === 'garage' ? 2.1 : 1.7}
             />
-          )}
-          <Home
-            className={`relative z-10 w-[18px] h-[18px] transition-colors ${
-              activeTab === 'garage' ? 'text-white' : 'text-[#6B7075]'
+          </span>
+          <span
+            className={`h-3 text-[10.5px] leading-[12px] tracking-tight transition-colors ${
+              activeTab === 'garage'
+                ? 'font-semibold text-[#111315]'
+                : 'font-medium text-[#6B7075]'
             }`}
-            strokeWidth={activeTab === 'garage' ? 2.1 : 1.7}
-          />
+          >
+            Home
+          </span>
         </button>
 
         <button
           type="button"
           onClick={() => onSelectTab('purchases')}
-          aria-label="Tyres & Purchases"
-          title="Tyres & Purchases"
+          aria-label="Past"
           aria-current={activeTab === 'purchases' ? 'page' : undefined}
-          className="relative w-10 h-10 rounded-full hover:bg-black/[0.04] flex items-center justify-center transition-colors cursor-pointer"
+          className="relative z-10 flex flex-col items-center gap-2 group cursor-pointer"
         >
-          {activeTab === 'purchases' && (
-            <motion.span
-              layoutId="bottom-nav-active-circle"
-              transition={{ type: 'spring', stiffness: 420, damping: 32 }}
-              className="absolute inset-0 rounded-full bg-[#111315] shadow-[0_2px_8px_rgba(17,19,21,0.18)]"
+          <span className="relative w-10 h-10 rounded-full group-hover:bg-black/[0.04] flex items-center justify-center transition-colors">
+            {activeTab === 'purchases' && (
+              <motion.span
+                layoutId="bottom-nav-active-circle"
+                transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                className="absolute inset-0 rounded-full bg-[#111315] shadow-[0_2px_8px_rgba(17,19,21,0.18)]"
+              />
+            )}
+            <WheelIcon
+              className={`relative z-10 w-[25px] h-[25px] transition-colors ${
+                activeTab === 'purchases' ? 'text-white' : 'text-[#6B7075]'
+              }`}
             />
-          )}
-          <WheelIcon
-            className={`relative z-10 w-[24px] h-[24px] transition-colors ${
-              activeTab === 'purchases' ? 'text-white' : 'text-[#6B7075]'
+          </span>
+          <span
+            className={`h-3 text-[10.5px] leading-[12px] tracking-tight transition-colors ${
+              activeTab === 'purchases'
+                ? 'font-semibold text-[#111315]'
+                : 'font-medium text-[#6B7075]'
             }`}
-          />
+          >
+            Past
+          </span>
         </button>
 
         <button
           type="button"
           onClick={onOpenLog}
-          aria-label="Log pressure top-up"
-          title="Log pressure top-up"
-          className="w-10 h-10 rounded-full bg-[#D7D9D6] hover:bg-[#CFD1CE] text-[#FF5A1F] active:scale-[0.94] transition-all flex items-center justify-center cursor-pointer"
+          aria-label="Log"
+          className="relative z-10 flex flex-col items-center gap-2 group cursor-pointer"
         >
-          <MapPinPlus className="w-[18px] h-[18px]" strokeWidth={1.9} />
+          <span className="w-10 h-10 rounded-full bg-[#D7D9D6] group-hover:bg-[#CFD1CE] text-[#FF5A1F] group-active:scale-[0.94] transition-all flex items-center justify-center">
+            <MapPinPlus className="w-[18px] h-[18px]" strokeWidth={1.9} />
+          </span>
+          <span className="h-3 text-[10.5px] leading-[12px] tracking-tight font-semibold text-[#FF5A1F]">
+            Log
+          </span>
         </button>
-      </div>
-    </nav>
+      </nav>
+    </footer>
   );
 }

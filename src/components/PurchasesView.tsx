@@ -704,13 +704,13 @@ export function PurchasesView({
         </div>
 
         {/* Bottom Stacked Drawers: Installation by Tyre (Behind) + Contacts (Front) */}
-        <div className="mt-3 px-4 sm:px-6">
+        <div className="mt-3 sm:px-6">
           {/* Per-Corner Installed Tyres: Greyish Tab Behind Contacts -> White Expanded Drawer */}
           <section
             ref={installationsSectionRef}
-            className={`relative z-0 scroll-mb-24 overflow-hidden transition-colors duration-300 rounded-3xl ${
+            className={`relative z-0 scroll-mb-24 overflow-hidden transition-colors duration-300 rounded-t-3xl rounded-b-none ${
               installationsExpanded
-                ? 'bg-white border border-black/7 shadow-[0_4px_16px_rgba(17,19,21,0.04)]'
+                ? 'bg-white border-t border-x border-black/7 shadow-[0_-4px_16px_rgba(17,19,21,0.04)]'
                 : 'bg-[#E2E4E0] text-[#111315]'
             }`}
           >
@@ -834,7 +834,7 @@ export function PurchasesView({
           {/* Collapsible Contacts Bar: Overlaps bottom of Installation by Tyre */}
           <section
             ref={contactsSectionRef}
-            className="relative z-10 -mt-5 bg-[#16191D] text-white rounded-3xl border border-black/15 shadow-[0_-2px_6px_rgba(17,19,21,0.05)] overflow-hidden"
+            className="relative z-10 -mt-5 bg-[#16191D] text-white rounded-t-3xl rounded-b-none lg:rounded-3xl border-t border-x lg:border border-black/15 shadow-[0_-2px_6px_rgba(17,19,21,0.05)] overflow-hidden"
           >
             <button
               type="button"

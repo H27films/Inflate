@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X } from 'lucide-react';
 import { CarId, CarProfile, CarRenewals, CORNER_LABELS, TyreCorner } from '../types';
-import { formatRenewalDate, getCornerPurchaseInfo } from '../data/initialGarage';
+import { formatRenewalDate, getCornerPurchaseInfo, parseLocalDate } from '../data/initialGarage';
 
 interface CarBirdsEyeViewProps {
   car: CarProfile;
@@ -37,11 +37,68 @@ const SOURCE_IMAGES: Record<CarId, string> = {
   fortuner: '/assets/aistudio/fortuner_cutout.png',
 };
 
+const PLATE_NUMBERS: Record<CarId, string> = {
+  slk250: 'WCD 428D',
+  fortuner: 'WSE 4751',
+};
+
 function formatPrice(amount: number): string {
   return `RM${amount.toLocaleString('en-MY', {
     minimumFractionDigits: amount % 1 === 0 ? 0 : 2,
     maximumFractionDigits: 2,
   })}`;
+}
+
+function formatCompactWeekdayMonthDay(dateStr: string): string {
+  const dt = parseLocalDate(dateStr);
+  const weekday = dt.toLocaleDateString('en-US', { weekday: 'short' });
+  const month = dt.toLocaleDateString('en-US', { month: 'short' });
+  return `${weekday}, ${month} - ${dt.getDate()}`;
+}
+
+function formatTyreAgeMonthsUpper(dateStr: string): string {
+  const today = new Date();
+  const bought = parseLocalDate(dateStr);
+  let months =
+    (today.getFullYear() - bought.getFullYear()) * 12 +
+    (today.getMonth() - bought.getMonth());
+  if (today.getDate() < bought.getDate()) {
+    months -= 1;
+  }
+  if (months <= 0) {
+    return '0 MONTHS';
+  }
+  return months === 1 ? '1 MONTH' : `${months} MONTHS`;
+}
+
+function getRenewalCountdown(dateStr: string): { label: string; isUrgent: boolean } {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = parseLocalDate(dateStr);
+  target.setHours(0, 0, 0, 0);
+  const diffDays = Math.round(
+    (target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+  );
+
+  if (diffDays <= 0) {
+    return {
+      label: diffDays === 0 ? 'Due today' : `${Math.abs(diffDays)}d overdue`,
+      isUrgent: true,
+    };
+  }
+
+  if (diffDays < 30) {
+    return {
+      label: diffDays === 1 ? '1 Day' : `${diffDays} Days`,
+      isUrgent: diffDays < 14,
+    };
+  }
+
+  const weeks = Math.round(diffDays / 7);
+  return {
+    label: weeks === 1 ? '1 week' : `${weeks} weeks`,
+    isUrgent: false,
+  };
 }
 
 function removeEdgeBackground(
@@ -292,13 +349,29 @@ export function CarBirdsEyeView({
 }: CarBirdsEyeViewProps) {
   const [cutoutUrls, setCutoutUrls] = useState<Partial<Record<CarId, string>>>({});
   const [roofSelected, setRoofSelected] = useState(false);
+  const [zoomedCorner, setZoomedCorner] = useState<TyreCorner | null>(null);
+  const [keepClipped, setKeepClipped] = useState(false);
   const [editingField, setEditingField] = useState<keyof CarRenewals | null>(null);
   const [draftDate, setDraftDate] = useState('2027-01-10');
 
   useEffect(() => {
     setRoofSelected(false);
+    setZoomedCorner(null);
+    setKeepClipped(false);
     setEditingField(null);
   }, [car.id]);
+
+  useEffect(() => {
+    if (zoomedCorner) {
+      setKeepClipped(true);
+    }
+  }, [zoomedCorner]);
+
+  useEffect(() => {
+    if (!selectedCorner || selectedCorner !== zoomedCorner) {
+      setZoomedCorner(null);
+    }
+  }, [selectedCorner, zoomedCorner]);
 
   useEffect(() => {
     let active = true;
@@ -322,6 +395,9 @@ export function CarBirdsEyeView({
 
   const insuranceDate = car.renewals?.insurance ?? '2027-01-10';
   const cartaxDate = car.renewals?.cartax ?? '2027-01-10';
+  const coolantDate = car.renewals?.coolant ?? '2026-11-16';
+  const insuranceCountdown = getRenewalCountdown(insuranceDate);
+  const cartaxCountdown = getRenewalCountdown(cartaxDate);
 
   const openEditRenewal = (field: keyof CarRenewals, currentDate: string) => {
     setEditingField(field);
@@ -348,96 +424,266 @@ export function CarBirdsEyeView({
     selectedInfo && selectedInfo.corners.length > 0
       ? Math.round((selectedInfo.totalCost / selectedInfo.corners.length) * 100) / 100
       : null;
+  const selectedAgeUpper = selectedInfo
+    ? formatTyreAgeMonthsUpper(selectedInfo.date)
+    : null;
+  const latestLog = car.pressureLogs[0] ?? null;
+  const latestLowCorner = latestLog?.lowTyre?.corner ?? null;
+
+  const getCornerRingState = (corner: TyreCorner): 'pulse-red' | 'red' | 'orange' | 'green' => {
+    const isFlagged = latestLowCorner === corner;
+    if (isFlagged) return 'pulse-red';
+    if (!latestLog) return 'orange';
+
+    const reading =
+      latestLog.beforePressures?.[corner] ?? latestLog.pressures[corner];
+    const standard = car.recommendedKpa[corner];
+    const drop = standard - reading;
+
+    if (drop <= 10) return 'green';
+    if (drop <= 40) return 'orange';
+    return 'red';
+  };
+
+  const zoomedSpot = zoomedCorner
+    ? spots.find((s) => s.corner === zoomedCorner) ?? null
+    : null;
+  const isZoomed = zoomedSpot !== null;
+  const isZoomedLeftWheel =
+    zoomedSpot?.corner === 'FL' || zoomedSpot?.corner === 'RL';
+  const isZoomedTopWheel =
+    zoomedSpot?.corner === 'FL' || zoomedSpot?.corner === 'FR';
+
+  const zoomTransform = zoomedSpot
+    ? {
+        scale: 1.85,
+        x: isZoomedLeftWheel ? '118%' : '-118%',
+        y: isZoomedTopWheel ? '36%' : '-36%',
+      }
+    : {
+        scale: 1,
+        x: '0%',
+        y: '0%',
+      };
+
+  const recentReadings = zoomedCorner
+    ? car.pressureLogs.slice(0, 3).map((entry) => {
+        const isLow = entry.lowTyre?.corner === zoomedCorner;
+        const kpa =
+          isLow && entry.lowTyre?.beforeKpa !== undefined
+            ? entry.lowTyre.beforeKpa
+            : entry.beforePressures?.[zoomedCorner] ?? entry.pressures[zoomedCorner];
+        return {
+          id: entry.id,
+          dateLabel: formatCompactWeekdayMonthDay(entry.date),
+          kpa,
+          isLow,
+        };
+      })
+    : [];
 
   return (
-    <div className="w-full h-full flex items-center justify-center relative select-none">
+    <div
+      className={`w-full h-full flex items-center justify-center relative select-none ${
+        isZoomed || keepClipped ? 'overflow-hidden rounded-2xl' : ''
+      }`}
+    >
+      {isZoomed && (
+        <button
+          type="button"
+          onClick={() => setZoomedCorner(null)}
+          aria-label="Zoom out to full car"
+          className="absolute inset-0 z-0 cursor-pointer focus:outline-none"
+        />
+      )}
+
       <AnimatePresence mode="wait">
         <motion.div
           key={car.id}
           initial={{ opacity: 0, scale: 0.96 }}
-          animate={{ opacity: 1, scale: 1 }}
+          animate={{
+            opacity: 1,
+            scale: zoomTransform.scale,
+            x: zoomTransform.x,
+            y: zoomTransform.y,
+          }}
           exit={{ opacity: 0, scale: 0.96 }}
-          transition={{ duration: 0.2 }}
-          className="relative h-full max-w-full aspect-[4/7] flex items-center justify-center"
+          transition={{ type: 'spring', stiffness: 280, damping: 30 }}
+          onAnimationComplete={() => {
+            if (!isZoomed) setKeepClipped(false);
+          }}
+          className="relative h-full max-w-full aspect-[4/7] flex items-center justify-center origin-center will-change-transform"
         >
-          <img
-            src={activeSrc}
-            alt={`${car.displayTitle} top-down bird's eye view`}
-            referrerPolicy="no-referrer"
-            className="w-full h-full object-contain pointer-events-none drop-shadow-[0_10px_18px_rgba(17,19,21,0.12)]"
-          />
+          <motion.div
+            animate={{
+              scale: roofSelected && !isZoomed ? 0.76 : 1,
+              y: roofSelected && !isZoomed ? (car.id === 'slk250' ? '-4.5%' : '2%') : '0%',
+            }}
+            transition={{ type: 'spring', stiffness: 280, damping: 28 }}
+            className="relative w-full h-full flex items-center justify-center origin-center will-change-transform"
+          >
+            <img
+              src={activeSrc}
+              alt={`${car.displayTitle} top-down bird's eye view`}
+              referrerPolicy="no-referrer"
+              className="w-full h-full object-contain pointer-events-none drop-shadow-[0_10px_18px_rgba(17,19,21,0.12)]"
+            />
 
-          {/* Interactive Wheel Hotspots */}
-          {spots.map((spot) => {
-            const isSelected = selectedCorner === spot.corner;
-            return (
+            {/* Interactive Wheel Hotspots */}
+            {spots.map((spot) => {
+              const isSelected = selectedCorner === spot.corner;
+              const ringState = getCornerRingState(spot.corner);
+              const selectedClasses =
+                ringState === 'green'
+                  ? 'bg-[#166534]/24 ring-2 ring-[#166534] shadow-[0_0_16px_rgba(22,101,52,0.42)] scale-105'
+                  : ringState === 'red'
+                    ? 'bg-[#DC2626]/26 ring-2 ring-[#DC2626] shadow-[0_0_18px_rgba(220,38,38,0.48)] scale-105'
+                    : 'bg-[#FF5A1F]/28 ring-2 ring-[#FF5A1F] shadow-[0_0_18px_rgba(255,90,31,0.5)] scale-105';
+              return (
+                <button
+                  key={spot.corner}
+                  type="button"
+                  onClick={() => {
+                    if (isZoomed) {
+                      setZoomedCorner(null);
+                      return;
+                    }
+                    setRoofSelected(false);
+                    onSelectCorner(isSelected ? null : spot.corner);
+                  }}
+                  aria-label={
+                    isZoomed
+                      ? 'Zoom out from wheel'
+                      : `Select ${CORNER_LABELS[spot.corner]} tyre (${spot.corner})`
+                  }
+                  aria-pressed={isSelected}
+                  style={{
+                    left: `${spot.leftPct}%`,
+                    top: `${spot.topPct}%`,
+                  }}
+                  className="absolute -translate-x-1/2 -translate-y-1/2 w-12 h-16 flex items-center justify-center cursor-pointer focus:outline-none group"
+                >
+                  {isSelected && ringState === 'pulse-red' ? (
+                    <motion.span
+                      animate={{
+                        borderColor: ['#B91C1C', '#EF4444', '#B91C1C'],
+                        backgroundColor: [
+                          'rgba(185, 28, 28, 0.24)',
+                          'rgba(239, 68, 68, 0.36)',
+                          'rgba(185, 28, 28, 0.24)',
+                        ],
+                        boxShadow: [
+                          '0 0 14px rgba(185, 28, 28, 0.45)',
+                          '0 0 24px rgba(239, 68, 68, 0.72)',
+                          '0 0 14px rgba(185, 28, 28, 0.45)',
+                        ],
+                        scale: [1.04, 1.1, 1.04],
+                      }}
+                      transition={{
+                        duration: 1.5,
+                        repeat: Infinity,
+                        ease: 'easeInOut',
+                      }}
+                      className="w-7 h-12 rounded-xl border-2"
+                    />
+                  ) : (
+                    <span
+                      className={`w-7 h-12 rounded-xl transition-all duration-150 ${
+                        isSelected
+                          ? selectedClasses
+                          : 'bg-transparent group-hover:ring-1 group-hover:ring-black/25 group-hover:bg-black/5'
+                      }`}
+                    />
+                  )}
+                </button>
+              );
+            })}
+
+            {/* Interactive Center Roof Hotspot for Insurance, Car Tax & SLK Coolant */}
+            {!isZoomed && (
               <button
-                key={spot.corner}
                 type="button"
-                onClick={() => onSelectCorner(isSelected ? null : spot.corner)}
-                aria-label={`Select ${CORNER_LABELS[spot.corner]} tyre (${spot.corner})`}
-                aria-pressed={isSelected}
-                style={{
-                  left: `${spot.leftPct}%`,
-                  top: `${spot.topPct}%`,
+                onClick={() => {
+                  setRoofSelected((prev) => {
+                    const next = !prev;
+                    if (next) onSelectCorner(null);
+                    return next;
+                  });
                 }}
-                className="absolute -translate-x-1/2 -translate-y-1/2 w-12 h-16 flex items-center justify-center cursor-pointer focus:outline-none group"
+                aria-label={
+                  car.id === 'slk250'
+                    ? 'Toggle insurance, car tax, and coolant dates'
+                    : 'Toggle insurance and car tax renewal dates'
+                }
+                aria-pressed={roofSelected}
+                style={{ left: '50%', top: '52%' }}
+                className="absolute -translate-x-1/2 -translate-y-1/2 w-14 h-20 flex items-center justify-center cursor-pointer focus:outline-none group"
               >
                 <span
-                  className={`w-7 h-12 rounded-xl transition-all duration-150 ${
-                    isSelected
-                      ? 'bg-[#FF5A1F]/28 ring-2 ring-[#FF5A1F] shadow-[0_0_18px_rgba(255,90,31,0.5)] scale-105'
-                      : 'bg-transparent group-hover:ring-1 group-hover:ring-black/25 group-hover:bg-black/5'
+                  className={`w-8 h-12 rounded-2xl transition-all duration-150 ${
+                    roofSelected
+                      ? 'bg-[#5C769D]/28 ring-2 ring-[#5C769D] shadow-[0_0_18px_rgba(92,118,157,0.5)] scale-105'
+                      : 'bg-transparent group-hover:ring-1 group-hover:ring-black/20 group-hover:bg-black/5'
                   }`}
                 />
               </button>
-            );
-          })}
+            )}
+          </motion.div>
 
-          {/* Interactive Center Roof Hotspot for Insurance & Car Tax */}
-          <button
-            type="button"
-            onClick={() => setRoofSelected((prev) => !prev)}
-            aria-label="Toggle insurance and car tax renewal dates"
-            aria-pressed={roofSelected}
-            style={{ left: '50%', top: '52%' }}
-            className="absolute -translate-x-1/2 -translate-y-1/2 w-14 h-20 flex items-center justify-center cursor-pointer focus:outline-none group"
-          >
-            <span
-              className={`w-8 h-12 rounded-2xl transition-all duration-150 ${
-                roofSelected
-                  ? 'bg-[#FF5A1F]/22 ring-2 ring-[#FF5A1F] shadow-[0_0_18px_rgba(255,90,31,0.45)] scale-105'
-                  : 'bg-transparent group-hover:ring-1 group-hover:ring-black/20 group-hover:bg-black/5'
-              }`}
-            />
-          </button>
-
-          {/* Left & Right Renewal Pop-Ups when Roof is Selected */}
+          {/* Front Plate, Left Insurance, Right Car Tax & SLK Rear Coolant Pop-Ups */}
           <AnimatePresence>
-            {roofSelected && (
+            {roofSelected && !isZoomed && (
               <>
+                <motion.div
+                  key={`${car.id}-plate`}
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 2 }}
+                  transition={{ duration: 0.18 }}
+                  style={{
+                    top: car.id === 'slk250' ? '5.5%' : '7.5%',
+                    left: '50%',
+                  }}
+                  className="absolute -translate-x-1/2 -translate-y-1/2 z-10 text-center w-max pointer-events-none"
+                >
+                  <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-white/75 backdrop-blur-md border border-white/90 ring-1 ring-black/[0.06] shadow-[0_2px_10px_rgba(17,19,21,0.06)] font-sans text-[11px] font-medium tracking-wide uppercase text-[#111315] whitespace-nowrap leading-none">
+                    {PLATE_NUMBERS[car.id]}
+                  </span>
+                </motion.div>
+
                 <motion.div
                   key={`${car.id}-insurance`}
                   initial={{ opacity: 0, x: 6 }}
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: 4 }}
-                  transition={{ duration: 0.16 }}
+                  transition={{ duration: 0.18 }}
                   style={{
-                    top: '50%',
-                    right: 'calc(85% + 18px)',
+                    top: car.id === 'slk250' ? '45.5%' : '52%',
+                    right: 'calc(82% + 14px)',
                   }}
-                  className="absolute -translate-y-1/2 text-right space-y-0.5 w-max max-w-[125px] sm:max-w-[175px]"
+                  className="absolute -translate-y-1/2 text-right w-max max-w-[125px] sm:max-w-[175px]"
                 >
-                  <p className="font-display text-sm sm:text-[15px] font-bold text-[#111315] leading-tight">
-                    Insurance
-                  </p>
                   <button
                     type="button"
                     onClick={() => openEditRenewal('insurance', insuranceDate)}
                     aria-label={`Edit insurance renewal date (${formatRenewalDate(insuranceDate)})`}
-                    className="font-sans text-[11px] sm:text-xs font-normal text-[#5E646A] hover:text-[#FF5A1F] active:scale-[0.98] transition-colors whitespace-nowrap leading-tight cursor-pointer underline decoration-black/20 underline-offset-2"
+                    className="group text-right space-y-0.5 cursor-pointer focus:outline-none"
                   >
-                    {formatRenewalDate(insuranceDate)}
+                    <p className="font-display text-[13px] sm:text-sm font-medium text-[#2A2E33] leading-tight">
+                      Insurance
+                    </p>
+                    <p
+                      className={`font-display text-lg sm:text-xl font-light tabular-nums whitespace-nowrap leading-none pt-0.5 ${
+                        insuranceCountdown.isUrgent
+                          ? 'text-[#991B1B]'
+                          : 'text-[#111315]'
+                      }`}
+                    >
+                      {insuranceCountdown.label}
+                    </p>
+                    <p className="font-sans text-[11px] sm:text-xs font-normal text-[#5E646A] group-hover:text-[#4E6A94] group-active:scale-[0.98] transition-colors whitespace-nowrap leading-tight pt-0.5">
+                      {formatRenewalDate(insuranceDate)}
+                    </p>
                   </button>
                 </motion.div>
 
@@ -446,34 +692,89 @@ export function CarBirdsEyeView({
                   initial={{ opacity: 0, x: -6 }}
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: -4 }}
-                  transition={{ duration: 0.16 }}
+                  transition={{ duration: 0.18 }}
                   style={{
-                    top: '50%',
-                    left: 'calc(85% + 18px)',
+                    top: car.id === 'slk250' ? '45.5%' : '52%',
+                    left: 'calc(82% + 14px)',
                   }}
-                  className="absolute -translate-y-1/2 text-left space-y-0.5 w-max max-w-[125px] sm:max-w-[175px]"
+                  className="absolute -translate-y-1/2 text-left w-max max-w-[125px] sm:max-w-[175px]"
                 >
-                  <p className="font-display text-sm sm:text-[15px] font-bold text-[#111315] leading-tight">
-                    Car Tax
-                  </p>
                   <button
                     type="button"
                     onClick={() => openEditRenewal('cartax', cartaxDate)}
                     aria-label={`Edit car tax renewal date (${formatRenewalDate(cartaxDate)})`}
-                    className="font-sans text-[11px] sm:text-xs font-normal text-[#5E646A] hover:text-[#FF5A1F] active:scale-[0.98] transition-colors whitespace-nowrap leading-tight cursor-pointer underline decoration-black/20 underline-offset-2"
+                    className="group text-left space-y-0.5 cursor-pointer focus:outline-none"
                   >
-                    {formatRenewalDate(cartaxDate)}
+                    <p className="font-display text-[13px] sm:text-sm font-medium text-[#2A2E33] leading-tight">
+                      Car Tax
+                    </p>
+                    <p
+                      className={`font-display text-lg sm:text-xl font-light tabular-nums whitespace-nowrap leading-none pt-0.5 ${
+                        cartaxCountdown.isUrgent
+                          ? 'text-[#991B1B]'
+                          : 'text-[#111315]'
+                      }`}
+                    >
+                      {cartaxCountdown.label}
+                    </p>
+                    <p className="font-sans text-[11px] sm:text-xs font-normal text-[#5E646A] group-hover:text-[#4E6A94] group-active:scale-[0.98] transition-colors whitespace-nowrap leading-tight pt-0.5">
+                      {formatRenewalDate(cartaxDate)}
+                    </p>
                   </button>
                 </motion.div>
+
+                {car.id === 'slk250' && (
+                  <motion.div
+                    key={`${car.id}-coolant`}
+                    initial={{ opacity: 0, y: -4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -2 }}
+                    transition={{ duration: 0.18 }}
+                    style={{
+                      top: '92.5%',
+                      left: '50%',
+                    }}
+                    className="absolute -translate-x-1/2 -translate-y-1/2 z-10 text-center w-max max-w-[160px]"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => openEditRenewal('coolant', coolantDate)}
+                      aria-label={`Edit coolant last entry date (${formatRenewalDate(coolantDate)})`}
+                      className="group text-center space-y-0.5 cursor-pointer focus:outline-none"
+                    >
+                      <p className="font-display text-[13px] sm:text-sm font-medium text-[#2A2E33] leading-tight">
+                        Coolant
+                      </p>
+                      <p className="font-sans text-[11px] sm:text-xs font-normal text-[#5E646A] group-hover:text-[#4E6A94] group-active:scale-[0.98] transition-colors whitespace-nowrap leading-tight">
+                        {formatRenewalDate(coolantDate)}
+                      </p>
+                    </button>
+                  </motion.div>
+                )}
               </>
             )}
           </AnimatePresence>
 
-          {/* Borderless Text Pop-Up Next to Selected Wheel: Model, Sizing, Last $ Price */}
+          {/* Borderless Text Pop-Up Next to Selected Wheel: Click to zoom in */}
           <AnimatePresence>
-            {activeSpot && (
+            {activeSpot && !isZoomed && (
               <motion.div
                 key={`${car.id}-${activeSpot.corner}`}
+                role="button"
+                tabIndex={0}
+                onClick={() => {
+                  setRoofSelected(false);
+                  setZoomedCorner(activeSpot.corner);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setRoofSelected(false);
+                    setZoomedCorner(activeSpot.corner);
+                  }
+                }}
+                aria-label={`Zoom in to ${CORNER_LABELS[activeSpot.corner]} wheel and recent readings`}
+                title="Tap to zoom in"
                 initial={{
                   opacity: 0,
                   x: activeSpot.corner === 'FL' || activeSpot.corner === 'RL' ? 6 : -6,
@@ -490,7 +791,7 @@ export function CarBirdsEyeView({
                     ? { right: `calc(${100 - activeSpot.leftPct}% + 22px)` }
                     : { left: `calc(${activeSpot.leftPct}% + 22px)` }),
                 }}
-                className={`absolute -translate-y-1/2 z-10 w-max max-w-[100px] sm:max-w-[165px] space-y-0.5 ${
+                className={`absolute -translate-y-1/2 z-10 w-max max-w-[100px] sm:max-w-[165px] space-y-0.5 cursor-pointer focus:outline-none ${
                   activeSpot.corner === 'FL' || activeSpot.corner === 'RL'
                     ? 'text-right'
                     : 'text-left'
@@ -530,6 +831,121 @@ export function CarBirdsEyeView({
         </motion.div>
       </AnimatePresence>
 
+      {/* Zoomed Wheel Detail & Last 3 Readings Overlay */}
+      <AnimatePresence>
+        {zoomedSpot && (
+          <motion.div
+            key={`zoom-detail-${car.id}-${zoomedSpot.corner}`}
+            initial={{
+              opacity: 0,
+              x: isZoomedLeftWheel ? -16 : 16,
+              scale: 0.94,
+            }}
+            animate={{ opacity: 1, x: 0, scale: 1 }}
+            exit={{
+              opacity: 0,
+              x: isZoomedLeftWheel ? -12 : 12,
+              scale: 0.94,
+            }}
+            transition={{ type: 'spring', stiffness: 320, damping: 28 }}
+            className={`absolute top-1/2 -translate-y-1/2 z-20 w-[56%] max-w-[235px] space-y-2 pointer-events-auto ${
+              isZoomedLeftWheel ? 'left-1 sm:left-3 text-left' : 'right-1 sm:right-3 text-right'
+            }`}
+          >
+            <div className="space-y-0.5">
+              <div
+                className={`flex items-center gap-2 ${
+                  isZoomedLeftWheel ? 'justify-between' : 'flex-row-reverse justify-between'
+                }`}
+              >
+                {selectedAgeUpper ? (
+                  <p className="font-display text-lg sm:text-xl font-light tracking-wide text-[#5E646A] leading-none uppercase tabular-nums">
+                    {selectedAgeUpper}
+                  </p>
+                ) : (
+                  <p className="font-display text-lg sm:text-xl font-light tracking-wide text-[#5E646A] leading-none uppercase">
+                    {zoomedSpot.corner}
+                  </p>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setZoomedCorner(null)}
+                  aria-label="Zoom out"
+                  className="w-7 h-7 rounded-full bg-white/90 border border-black/10 shadow-sm flex items-center justify-center text-[#5E646A] hover:text-[#111315] shrink-0 cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {selectedInfo ? (
+                <>
+                  <p className="font-display text-base sm:text-lg font-bold text-[#111315] leading-tight pt-0.5">
+                    {selectedInfo.brandModel}
+                  </p>
+                  {selectedSize && (
+                    <p className="font-mono text-[11px] sm:text-xs font-medium text-[#5E646A] whitespace-nowrap leading-tight">
+                      {selectedSize}
+                    </p>
+                  )}
+                  {selectedUnitPrice !== null && (
+                    <p className="font-mono text-xs sm:text-sm font-bold text-[#FF5A1F] tabular-nums leading-tight">
+                      {formatPrice(selectedUnitPrice)}
+                    </p>
+                  )}
+                </>
+              ) : (
+                <>
+                  <p className="font-display text-base sm:text-lg font-bold text-[#111315] leading-tight pt-0.5">
+                    {CORNER_LABELS[zoomedSpot.corner]}
+                  </p>
+                  {selectedSize && (
+                    <p className="font-mono text-[11px] sm:text-xs font-medium text-[#5E646A] whitespace-nowrap leading-tight">
+                      {selectedSize}
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Last 3 Pressure Readings for this tyre */}
+            <div className="pt-2 border-t border-black/10 space-y-1">
+              {recentReadings.length === 0 ? (
+                <p className="text-[11px] text-[#6B7075]">No readings yet</p>
+              ) : (
+                recentReadings.map((reading) => (
+                  <div
+                    key={reading.id}
+                    className={`flex items-baseline justify-between gap-2 text-[11.5px] sm:text-xs tabular-nums ${
+                      isZoomedLeftWheel ? '' : 'flex-row-reverse'
+                    }`}
+                  >
+                    <span
+                      className={`whitespace-nowrap ${
+                        reading.isLow
+                          ? 'font-medium text-[#B91C1C]'
+                          : 'font-medium text-[#5E646A]'
+                      }`}
+                    >
+                      {reading.dateLabel}
+                    </span>
+                    <span
+                      className={`font-mono whitespace-nowrap ${
+                        reading.isLow
+                          ? 'font-bold text-[#B91C1C]'
+                          : 'font-semibold text-[#111315]'
+                      }`}
+                    >
+                      {reading.kpa} kPa
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Renewal Date Edit Modal */}
       <AnimatePresence>
         {editingField && (
@@ -553,7 +969,11 @@ export function CarBirdsEyeView({
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <h3 className="font-display text-base font-semibold text-[#111315]">
-                    {editingField === 'insurance' ? 'Insurance' : 'Car Tax'} Renewal
+                    {editingField === 'insurance'
+                      ? 'Insurance Renewal'
+                      : editingField === 'cartax'
+                        ? 'Car Tax Renewal'
+                        : 'Coolant'}
                   </h3>
                   <p className="text-xs text-[#5E646A] mt-0.5">{car.displayTitle}</p>
                 </div>
@@ -568,7 +988,9 @@ export function CarBirdsEyeView({
               </div>
 
               <label className="block">
-                <span className="text-[11px] font-medium text-[#5E646A]">Renewal date</span>
+                <span className="text-[11px] font-medium text-[#5E646A]">
+                  {editingField === 'coolant' ? 'Last entry date' : 'Renewal date'}
+                </span>
                 <input
                   type="date"
                   required

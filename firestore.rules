@@ -86,9 +86,10 @@ service cloud.firestore {
     function isValidRenewals(m) {
       return m is map
         && m.keys().hasAll(['insurance', 'cartax'])
-        && m.keys().hasOnly(['insurance', 'cartax'])
+        && m.keys().hasOnly(['insurance', 'cartax', 'coolant'])
         && isDateString(m.insurance)
-        && isDateString(m.cartax);
+        && isDateString(m.cartax)
+        && (!('coolant' in m) || isDateString(m.coolant));
     }
 
     function isValidCornersList(c) {

@@ -27,7 +27,7 @@ export const INITIAL_GARAGE: Record<CarId, CarProfile> = {
     displayTitle: 'Mercedes Benz SLK',
     make: 'Mercedes-Benz',
     model: 'SLK350',
-    trim: 'WC428D',
+    trim: 'WCD 428D',
     year: 2014,
     bodyStyle: 'roadster',
     paintHex: '#2C3137',
@@ -45,6 +45,7 @@ export const INITIAL_GARAGE: Record<CarId, CarProfile> = {
     renewals: {
       insurance: '2027-01-10',
       cartax: '2027-01-10',
+      coolant: '2026-11-16',
     },
     pressureLogs: [
       {
@@ -129,7 +130,7 @@ export const INITIAL_GARAGE: Record<CarId, CarProfile> = {
     displayTitle: 'Toyota Fortuner',
     make: 'Toyota',
     model: 'Fortuner',
-    trim: 'WSE 3751',
+    trim: 'WSE 4751',
     year: 2021,
     bodyStyle: 'suv',
     paintHex: '#465047',

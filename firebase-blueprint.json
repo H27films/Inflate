@@ -69,10 +69,11 @@
         },
         "renewals": {
           "type": "object",
-          "description": "Insurance and Cartax renewal due dates (YYYY-MM-DD).",
+          "description": "Insurance, Cartax, and (for SLK) Coolant dates (YYYY-MM-DD).",
           "properties": {
             "insurance": { "type": "string", "format": "date" },
-            "cartax": { "type": "string", "format": "date" }
+            "cartax": { "type": "string", "format": "date" },
+            "coolant": { "type": "string", "format": "date" }
           },
           "required": ["insurance", "cartax"]
         },

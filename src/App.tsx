@@ -317,13 +317,17 @@ export default function App() {
   };
 
   const handleUpdateRenewal = (field: keyof CarRenewals, date: string) => {
-    const current = activeCar.renewals ??
-      INITIAL_GARAGE[activeCarId].renewals ?? {
-        insurance: '2027-01-10',
-        cartax: '2027-01-10',
-      };
+    const fallbackRenewals = INITIAL_GARAGE[activeCarId].renewals ?? {
+      insurance: '2027-01-10',
+      cartax: '2027-01-10',
+    };
+    const current = activeCar.renewals ?? fallbackRenewals;
     const nextRenewals: CarRenewals = {
-      ...current,
+      insurance: current.insurance,
+      cartax: current.cartax,
+      ...(activeCarId === 'slk250'
+        ? { coolant: current.coolant ?? fallbackRenewals.coolant ?? '2026-11-16' }
+        : {}),
       [field]: date,
     };
     runFirestoreAction(updateCarRenewalsRecord(user.uid, activeCarId, nextRenewals));
@@ -501,8 +505,8 @@ export default function App() {
             </div>
           </section>
 
-          {/* Full-Width Bottom Pressure Log Bar with Curved Top Left & Right Edges */}
-          <div className="shrink-0 w-full lg:col-span-5 lg:self-start">
+          {/* Floating Rounded Pressure Log Card */}
+          <div className="shrink-0 w-full px-4 lg:px-0 lg:col-span-5 lg:self-start">
             <PressureLogSheet
               car={carWithSortedLogs}
               expanded={logExpanded}

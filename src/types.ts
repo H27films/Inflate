@@ -48,6 +48,7 @@ export interface PurchaseLogEntry {
 export interface CarRenewals {
   insurance: string; // YYYY-MM-DD
   cartax: string; // YYYY-MM-DD
+  coolant?: string; // YYYY-MM-DD (SLK only)
 }
 
 export interface CarProfile {

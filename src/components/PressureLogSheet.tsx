@@ -188,19 +188,19 @@ export function PressureLogSheet({
 
   return (
     <>
-      {/* Compact Black Summary Bar (always stays calmly in flow) */}
+      {/* Compact Modern Rounded Gradient Summary Card */}
       <section
         aria-label="Tyre pressure log summary"
-        className="relative w-full bg-[#16191D] text-white rounded-t-3xl rounded-b-none lg:rounded-3xl border-t border-x lg:border border-black/15 shadow-[0_-4px_16px_rgba(17,19,21,0.08)] overflow-hidden shrink-0"
+        className="relative w-full bg-gradient-to-br from-[#272B33] via-[#1B1E24] to-[#121418] text-white rounded-3xl ring-1 ring-inset ring-white/12 shadow-[0_12px_28px_-6px_rgba(17,19,21,0.32),0_2px_8px_rgba(17,19,21,0.14)] overflow-hidden shrink-0"
       >
         <button
           type="button"
           onClick={() => onToggleExpanded(true)}
-          className="w-full text-left px-4 py-2 cursor-pointer hover:bg-white/[0.03] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40 shrink-0"
+          className="w-full text-left px-4 py-2.5 cursor-pointer hover:bg-white/[0.04] active:scale-[0.995] transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40 shrink-0"
         >
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-baseline gap-2 min-w-0">
-              <h2 className="font-display text-base font-semibold text-white leading-none shrink-0">
+              <h2 className="font-display text-[15px] font-medium tracking-tight text-white leading-none shrink-0">
                 Pressure Log
               </h2>
               {latestLog && (
@@ -214,7 +214,7 @@ export function PressureLogSheet({
               <span className="text-xs font-medium text-white/75 tabular-nums">
                 {latestLog ? formatCompactMonthDay(latestLog.date) : 'No entries'}
               </span>
-              <span className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-white shrink-0">
+              <span className="w-7 h-7 rounded-full bg-white/[0.12] ring-1 ring-inset ring-white/15 flex items-center justify-center text-white/90 shrink-0">
                 <ChevronUp className="w-4 h-4" />
               </span>
             </div>

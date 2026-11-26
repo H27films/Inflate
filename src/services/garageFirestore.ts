@@ -82,7 +82,18 @@ function readLegacyRenewals(carId: CarId): CarRenewals | null {
       /^\d{4}-\d{2}-\d{2}$/.test(renewals.insurance) &&
       /^\d{4}-\d{2}-\d{2}$/.test(renewals.cartax)
     ) {
-      return renewals;
+      return {
+        insurance: renewals.insurance,
+        cartax: renewals.cartax,
+        ...(carId === 'slk250'
+          ? {
+              coolant:
+                typeof renewals.coolant === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(renewals.coolant)
+                  ? renewals.coolant
+                  : INITIAL_GARAGE.slk250.renewals?.coolant ?? '2026-11-16',
+            }
+          : {}),
+      };
     }
     return null;
   } catch {
@@ -268,6 +279,23 @@ export function subscribeToUserGarage(
         const d = docSnap.data();
         const carKey = d.carKey as CarId;
         if (carKey !== 'slk250' && carKey !== 'fortuner') return;
+        const rawRenewals = d.renewals as Partial<CarRenewals> | undefined;
+        const fallbackRenewals = INITIAL_GARAGE[carKey].renewals;
+        const renewals: CarRenewals = {
+          insurance:
+            typeof rawRenewals?.insurance === 'string'
+              ? rawRenewals.insurance
+              : fallbackRenewals?.insurance ?? '2027-01-10',
+          cartax:
+            typeof rawRenewals?.cartax === 'string'
+              ? rawRenewals.cartax
+              : fallbackRenewals?.cartax ?? '2027-01-10',
+          ...(typeof rawRenewals?.coolant === 'string'
+            ? { coolant: rawRenewals.coolant }
+            : carKey === 'slk250'
+              ? { coolant: fallbackRenewals?.coolant ?? '2026-11-16' }
+              : {}),
+        };
         next[carKey] = {
           id: carKey,
           displayTitle: String(d.displayTitle ?? INITIAL_GARAGE[carKey].displayTitle),
@@ -280,7 +308,7 @@ export function subscribeToUserGarage(
           accentLabel: String(d.accentLabel ?? INITIAL_GARAGE[carKey].accentLabel),
           recommendedKpa: (d.recommendedKpa as CornerPressures) ?? INITIAL_GARAGE[carKey].recommendedKpa,
           defaultSizes: (d.defaultSizes as { front: string; rear: string }) ?? INITIAL_GARAGE[carKey].defaultSizes,
-          renewals: (d.renewals as CarRenewals) ?? INITIAL_GARAGE[carKey].renewals,
+          renewals,
         };
       });
       callbacks.onCars(next);
@@ -572,9 +600,14 @@ export async function updateCarRenewalsRecord(
 ): Promise<void> {
   const carDocId = makeDocId(uid, carId);
   const path = `cars/${carDocId}`;
+  const cleanRenewals: CarRenewals = {
+    insurance: renewals.insurance,
+    cartax: renewals.cartax,
+    ...(carId === 'slk250' && renewals.coolant ? { coolant: renewals.coolant } : {}),
+  };
   try {
     await updateDoc(doc(db, 'cars', carDocId), {
-      renewals,
+      renewals: cleanRenewals,
       updatedAt: serverTimestamp(),
     });
   } catch (error) {

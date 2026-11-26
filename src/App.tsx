@@ -337,7 +337,7 @@ export default function App() {
               onClick={() => setAddPurchaseOpen(true)}
               aria-label="Add tyre purchase"
               title="Add tyre purchase"
-              className="absolute left-3.5 w-8 h-8 rounded-full bg-[#111315] text-white shadow-[0_2px_8px_rgba(17,19,21,0.14)] hover:bg-black/85 active:scale-[0.96] transition-all flex items-center justify-center cursor-pointer"
+              className="absolute left-3.5 w-8 h-8 rounded-full bg-[#111315] text-white border border-black/8 shadow-[0_2px_8px_rgba(17,19,21,0.04)] hover:bg-black/85 active:scale-[0.96] transition-all flex items-center justify-center cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5 text-white" />
             </button>
@@ -368,7 +368,7 @@ export default function App() {
       </header>
 
       {activeTab === 'purchases' ? (
-        <main className="flex-1 flex flex-col w-full pb-[calc(3.5rem+max(0.75rem,env(safe-area-inset-bottom)))]">
+        <main className="flex-1 flex flex-col w-full pb-[calc(4.25rem+max(0.75rem,env(safe-area-inset-bottom)))]">
           <PurchasesView
             car={carWithSortedLogs}
             contacts={contacts}
@@ -383,7 +383,7 @@ export default function App() {
         </main>
       ) : (
         /* Single-page zero-scroll Home layout */
-        <main className="flex-1 min-h-0 max-w-5xl w-full mx-auto pt-2.5 pb-[calc(3.5rem+max(0.75rem,env(safe-area-inset-bottom)))] flex flex-col justify-between gap-2 lg:px-6 lg:grid lg:grid-cols-12 lg:gap-5 lg:py-4 lg:pb-20">
+        <main className="flex-1 min-h-0 max-w-5xl w-full mx-auto pt-2.5 pb-[calc(4.25rem+max(0.75rem,env(safe-area-inset-bottom)))] flex flex-col justify-between gap-2 lg:px-6 lg:grid lg:grid-cols-12 lg:gap-5 lg:py-4 lg:pb-22">
           {/* Top / Left Section: Vehicle Title + Last Top-Up + Bird's-Eye Image + FL/FR/RL/RR Boxes */}
           <section className="flex-1 min-h-0 px-4 lg:px-0 flex flex-col gap-2 lg:col-span-7">
             <div className="shrink-0 px-0.5 space-y-0.5">
@@ -491,8 +491,8 @@ export default function App() {
             </div>
           </section>
 
-          {/* Full-Width Bottom Pressure Log Bar with Curved Top Left & Right Edges */}
-          <div className="shrink-0 w-full lg:col-span-5 lg:self-start">
+          {/* Floating Bottom Pressure Log Bar */}
+          <div className="shrink-0 w-full px-4 lg:px-0 lg:col-span-5 lg:self-start">
             <PressureLogSheet
               car={carWithSortedLogs}
               expanded={logExpanded}

@@ -191,7 +191,7 @@ export function PressureLogSheet({
       {/* Compact Black Summary Bar (always stays calmly in flow) */}
       <section
         aria-label="Tyre pressure log summary"
-        className="relative w-full bg-[#16191D] text-white rounded-t-3xl rounded-b-none lg:rounded-3xl border-t border-x lg:border border-black/15 shadow-[0_-4px_16px_rgba(17,19,21,0.08)] overflow-hidden shrink-0"
+        className="relative w-full bg-[#16191D] text-white rounded-3xl border border-black/15 shadow-[0_4px_16px_rgba(17,19,21,0.08)] overflow-hidden shrink-0"
       >
         <button
           type="button"
@@ -532,11 +532,21 @@ export function PressureLogSheet({
 
                               {hasPrevValues && (
                                 <div className="mt-1 flex items-center gap-3 font-mono text-xs tabular-nums text-[#111315]">
-                                  {TYRE_CORNERS.map((c) => (
-                                    <span key={c}>
-                                      {c} {prevByCorner[c] ?? '—'}
-                                    </span>
-                                  ))}
+                                  {TYRE_CORNERS.map((c) => {
+                                    const isLowCorner = entry.lowTyre?.corner === c;
+                                    return (
+                                      <span
+                                        key={c}
+                                        className={
+                                          isLowCorner
+                                            ? 'text-[#B91C1C] font-bold'
+                                            : undefined
+                                        }
+                                      >
+                                        {c} {prevByCorner[c] ?? '—'}
+                                      </span>
+                                    );
+                                  })}
                                   <span className="text-[#6B7075]">kPa</span>
                                 </div>
                               )}

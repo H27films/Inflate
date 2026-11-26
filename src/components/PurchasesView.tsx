@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ClipboardEvent, type FormEvent } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Plus, Trash2, X, Store, Ruler, Globe, Phone, ClipboardPaste, Check } from 'lucide-react';
+import { Plus, Trash2, X, Store, Ruler, Globe, Phone, ClipboardPaste, Check, ChevronDown } from 'lucide-react';
 import {
   CarProfile,
   CORNER_LABELS,
@@ -309,6 +309,7 @@ export function PurchasesView({
   onDeleteContact,
 }: PurchasesViewProps) {
   const [showContactModal, setShowContactModal] = useState(false);
+  const [contactsExpanded, setContactsExpanded] = useState(false);
   const [editingContactId, setEditingContactId] = useState<string | null>(null);
   const [entryMode, setEntryMode] = useState<'details' | 'paste'>('details');
   const [pasteText, setPasteText] = useState('');
@@ -365,6 +366,21 @@ export function PurchasesView({
   const sortedPurchases = [...car.purchaseLogs].sort((a, b) =>
     b.date.localeCompare(a.date)
   );
+
+  const getAxleAge = (cornersPair: [TyreCorner, TyreCorner]): string => {
+    const first = getCornerPurchaseInfo(car.purchaseLogs, cornersPair[0]);
+    const second = getCornerPurchaseInfo(car.purchaseLogs, cornersPair[1]);
+    const latest =
+      first && second
+        ? first.date >= second.date
+          ? first
+          : second
+        : first ?? second;
+    return latest ? formatTyreAge(latest.date) : '—';
+  };
+
+  const frontAge = getAxleAge(['FL', 'FR']);
+  const rearAge = getAxleAge(['RL', 'RR']);
 
   const toggleCorner = (corner: TyreCorner) => {
     setCorners((prev) =>
@@ -457,389 +473,427 @@ export function PurchasesView({
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.22 }}
-      className="space-y-4 pb-24 lg:pb-12"
-    >
-      {/* Top Tyre Sizing Summary + Installed Tyres */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-        {/* Front & Back Tyre Sizing Card */}
-        <div className="lg:col-span-5 bg-white rounded-3xl border border-black/7 p-5 space-y-3.5">
-          <div className="flex items-baseline justify-between gap-3">
-            <h1 className="font-display text-xl sm:text-2xl font-medium tracking-tight text-[#111315] leading-tight">
-              {car.displayTitle}
-            </h1>
-            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[#5E646A] shrink-0">
-              <Ruler className="w-3.5 h-3.5" />
-              <span>Tyre Sizing</span>
-            </span>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="p-3.5 rounded-2xl bg-[#F3F4F2] border border-black/5">
-              <span className="text-[11px] font-medium text-[#5E646A] block">
-                Front (FL / FR)
-              </span>
-              <span className="mt-1 font-mono text-sm font-semibold text-[#111315] block">
-                {car.defaultSizes.front}
+    <>
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.22 }}
+        className="flex-1 w-full max-w-5xl mx-auto flex flex-col justify-between pt-3 pb-0 lg:pb-6"
+      >
+        <div className="px-4 sm:px-6 space-y-3">
+          {/* Top Tyre Sizing Section on normal app background (no outer box) */}
+          <section className="space-y-2.5">
+            <div className="flex items-baseline justify-between gap-3 px-0.5">
+              <h1 className="font-display text-xl sm:text-2xl font-medium tracking-tight text-[#111315] leading-tight">
+                {car.displayTitle}
+              </h1>
+              <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[#5E646A] shrink-0">
+                <Ruler className="w-3.5 h-3.5" />
+                <span>Tyre Sizing</span>
               </span>
             </div>
-            <div className="p-3.5 rounded-2xl bg-[#F3F4F2] border border-black/5">
-              <span className="text-[11px] font-medium text-[#5E646A] block">
-                Back (RL / RR)
-              </span>
-              <span className="mt-1 font-mono text-sm font-semibold text-[#111315] block">
-                {car.defaultSizes.rear}
+
+            <div className="grid grid-cols-2 gap-2.5">
+              <div className="p-3.5 rounded-2xl bg-[#16191D] text-white">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-[11px] font-medium text-white/65">
+                    Front (FL / FR)
+                  </span>
+                  <span className="font-display text-sm font-bold tabular-nums text-white">
+                    {frontAge}
+                  </span>
+                </div>
+                <span className="mt-1 font-mono text-[12.5px] sm:text-sm font-semibold text-white whitespace-nowrap block">
+                  {car.defaultSizes.front}
+                </span>
+              </div>
+              <div className="p-3.5 rounded-2xl bg-[#16191D] text-white">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-[11px] font-medium text-white/65">
+                    Back (RL / RR)
+                  </span>
+                  <span className="font-display text-sm font-bold tabular-nums text-white">
+                    {rearAge}
+                  </span>
+                </div>
+                <span className="mt-1 font-mono text-[12.5px] sm:text-sm font-semibold text-white whitespace-nowrap block">
+                  {car.defaultSizes.rear}
+                </span>
+              </div>
+            </div>
+          </section>
+
+          {/* Purchase History Logs */}
+          <section className="bg-white rounded-3xl border border-black/7 p-4 sm:p-5">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-display text-base font-semibold text-[#111315]">
+                Purchase log
+              </h2>
+              <span className="text-xs text-[#5E646A] tabular-nums">
+                Newest first
               </span>
             </div>
-          </div>
-        </div>
 
-        {/* Per-Corner Installed Tyres with Last Purchase Price */}
-        <div className="lg:col-span-7 bg-white rounded-3xl border border-black/7 p-5">
-          <div className="flex items-center justify-between mb-3.5">
-            <h2 className="font-display text-sm font-semibold text-[#111315]">
-              Installed tyres by corner
-            </h2>
-            <span className="text-xs text-[#5E646A]">Age &amp; last price</span>
-          </div>
+            {sortedPurchases.length === 0 ? (
+              <div className="py-10 text-center text-sm text-[#6B7075]">
+                No tyre purchases recorded for {car.displayTitle}. Tap + above to log your set.
+              </div>
+            ) : (
+              <ul className="divide-y divide-black/6">
+                {sortedPurchases.map((item) => {
+                  const perTyre =
+                    item.corners.length > 0
+                      ? Math.round((item.totalCost / item.corners.length) * 100) / 100
+                      : item.totalCost;
+                  const matchedContact = findMatchingContact(item.vendor, contacts);
+                  const isHighlighted = highlightedPurchaseId === item.id;
 
-          <div className="grid grid-cols-2 gap-3">
-            {TYRE_CORNERS.map((corner) => {
-              const info = getCornerPurchaseInfo(car.purchaseLogs, corner);
-              const age = info ? formatTyreAge(info.date) : '—';
-              const perTyre =
-                info && info.corners.length > 0
-                  ? Math.round((info.totalCost / info.corners.length) * 100) / 100
-                  : null;
+                  return (
+                    <li
+                      key={item.id}
+                      ref={(el) => {
+                        purchaseRowRefs.current[item.id] = el;
+                      }}
+                      className={`py-4 first:pt-2 last:pb-2 transition-all duration-300 ${
+                        isHighlighted
+                          ? 'bg-[#F3F4F2] ring-2 ring-[#FF5A1F]/70 rounded-2xl px-3 -mx-3'
+                          : ''
+                      }`}
+                    >
+                      <div className="flex items-stretch justify-between gap-4">
+                        <div className="min-w-0 space-y-1.5">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-display font-semibold text-base text-[#111315]">
+                              {item.brandModel}
+                            </span>
+                            <span aria-hidden="true" className="text-[#9AA0A6]">·</span>
+                            <span className="font-mono text-xs font-medium text-[#5E646A]">
+                              {item.tyreSize}
+                            </span>
+                          </div>
 
-              const cardInner = (
-                <>
-                  <div className="flex items-baseline justify-between gap-2">
-                    <span className="font-mono text-xs font-semibold text-[#111315]">
-                      {corner}
-                    </span>
-                    <span className="font-display text-lg font-bold tabular-nums text-[#111315]">
-                      {age}
-                    </span>
-                  </div>
-                  <div className="flex items-baseline justify-between gap-1 mt-0.5">
-                    <p className="text-[10.5px] sm:text-[11px] text-[#5E646A] whitespace-nowrap">
-                      {CORNER_LABELS[corner]}
-                    </p>
-                    {perTyre !== null && (
-                      <span className="font-mono text-[10.5px] sm:text-[11px] font-semibold text-[#111315] tabular-nums whitespace-nowrap shrink-0">
-                        {formatRM(perTyre)}
+                          <div className="flex items-center gap-2 text-xs text-[#5E646A] flex-wrap">
+                            <span className="inline-flex items-center gap-1 text-[#111315] font-medium">
+                              <Store className="w-3.5 h-3.5 text-[#5E646A]" />
+                              {item.vendor}
+                            </span>
+                            <span aria-hidden="true" className="text-[#9AA0A6]">·</span>
+                            <span>Bought {formatDisplayDate(item.date)}</span>
+                            <span aria-hidden="true" className="text-[#9AA0A6]">·</span>
+                            <span className="font-medium text-[#111315] tabular-nums">
+                              {formatTyreAge(item.date)} old
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-3 pt-0.5">
+                            <div
+                              className="grid grid-cols-2 gap-1 p-1 rounded-lg bg-[#F3F4F2] border border-black/5 shrink-0"
+                              aria-label={`Fitted corners: ${item.corners.join(', ')}`}
+                            >
+                              {TYRE_CORNERS.map((c) => {
+                                const active = item.corners.includes(c);
+                                return (
+                                  <span
+                                    key={c}
+                                    className={`w-5 h-3.5 rounded-[3px] flex items-center justify-center font-mono text-[9px] font-semibold ${
+                                      active
+                                        ? 'bg-[#111315] text-white'
+                                        : 'bg-black/8 text-[#8C9298]'
+                                    }`}
+                                  >
+                                    {c}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                            <span className="text-xs text-[#5E646A]">
+                              {item.corners.map((c) => CORNER_LABELS[c]).join(', ')}
+                            </span>
+                          </div>
+
+                          {item.notes && (
+                            <p className="text-xs text-[#6B7075]">{item.notes}</p>
+                          )}
+                        </div>
+
+                        <div className="flex flex-col items-end justify-between gap-2 shrink-0">
+                          <div className="flex flex-col items-end gap-1">
+                            <div className="text-right">
+                              <div className="font-display text-lg font-bold tabular-nums text-[#111315]">
+                                {formatRM(item.totalCost)}
+                              </div>
+                              <div className="font-mono text-[11px] tabular-nums text-[#5E646A]">
+                                {formatRM(perTyre)}/tyre
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => onDeletePurchase(item.id)}
+                              aria-label={`Delete purchase from ${item.vendor}`}
+                              className="min-w-[36px] min-h-[36px] rounded-full flex items-center justify-center text-[#9AA0A6] hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+
+                          {matchedContact?.phone ? (
+                            <a
+                              href={formatWhatsAppHref(matchedContact.phone)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              aria-label={`WhatsApp ${matchedContact.company}`}
+                              title={`WhatsApp ${matchedContact.company} (${matchedContact.phone})`}
+                              className="w-9 h-9 rounded-full bg-[#111315] text-white hover:bg-black/80 transition-colors flex items-center justify-center shadow-[0_2px_8px_rgba(17,19,21,0.14)]"
+                            >
+                              <WhatsAppIcon className="w-4 h-4" />
+                            </a>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => openContactForVendor(item.vendor, matchedContact)}
+                              aria-label={`Add WhatsApp number for ${item.vendor}`}
+                              title={`Add WhatsApp number for ${item.vendor}`}
+                              className="w-9 h-9 rounded-full bg-[#111315] text-white hover:bg-black/80 transition-colors flex items-center justify-center shadow-[0_2px_8px_rgba(17,19,21,0.14)] cursor-pointer"
+                            >
+                              <WhatsAppIcon className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+
+          {/* Per-Corner Installed Tyres with Last Purchase Price */}
+          <div className="bg-white rounded-3xl border border-black/7 p-4 sm:p-5">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-display text-sm font-semibold text-[#111315]">
+                Installed tyres by corner
+              </h2>
+              <span className="text-xs text-[#5E646A]">Age &amp; last price</span>
+            </div>
+
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+              {TYRE_CORNERS.map((corner) => {
+                const info = getCornerPurchaseInfo(car.purchaseLogs, corner);
+                const age = info ? formatTyreAge(info.date) : '—';
+                const perTyre =
+                  info && info.corners.length > 0
+                    ? Math.round((info.totalCost / info.corners.length) * 100) / 100
+                    : null;
+
+                const cardInner = (
+                  <>
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="font-mono text-xs font-semibold text-[#111315]">
+                        {corner}
                       </span>
-                    )}
-                  </div>
-                  {info ? (
-                    <div className="mt-2 pt-2 border-t border-black/6 text-[11px] text-[#5E646A] space-y-1">
-                      <p className="text-xs font-semibold text-[#111315] leading-snug">
-                        {info.brandModel}
-                      </p>
-                      <p className="font-mono text-[#5E646A] truncate">
-                        {info.tyreSize}
-                      </p>
-                      <p className="tabular-nums text-[#5E646A]">
-                        {formatDisplayDate(info.date)}
-                      </p>
-                      <p className="font-mono text-xs font-bold text-[#111315] tabular-nums">
-                        {formatRM(info.totalCost)} total
-                      </p>
+                      <span className="font-display text-lg font-bold tabular-nums text-[#111315]">
+                        {age}
+                      </span>
                     </div>
-                  ) : (
-                    <p className="mt-2 pt-2 border-t border-black/6 text-[11px] text-[#6B7075]">
-                      No purchase recorded
-                    </p>
-                  )}
-                </>
-              );
+                    <div className="flex items-baseline justify-between gap-1 mt-0.5">
+                      <p className="text-[10.5px] sm:text-[11px] text-[#5E646A] whitespace-nowrap">
+                        {CORNER_LABELS[corner]}
+                      </p>
+                      {perTyre !== null && (
+                        <span className="font-mono text-[10.5px] sm:text-[11px] font-semibold text-[#111315] tabular-nums whitespace-nowrap shrink-0">
+                          {formatRM(perTyre)}
+                        </span>
+                      )}
+                    </div>
+                    {info ? (
+                      <div className="mt-2 pt-2 border-t border-black/6 text-[11px] text-[#5E646A] space-y-1">
+                        <p className="text-xs font-semibold text-[#111315] leading-snug">
+                          {info.brandModel}
+                        </p>
+                        <p className="font-mono text-[#5E646A] truncate">
+                          {info.tyreSize}
+                        </p>
+                        <p className="tabular-nums text-[#5E646A]">
+                          {formatDisplayDate(info.date)}
+                        </p>
+                        <p className="font-mono text-xs font-bold text-[#111315] tabular-nums">
+                          {formatRM(info.totalCost)} total
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="mt-2 pt-2 border-t border-black/6 text-[11px] text-[#6B7075]">
+                        No purchase recorded
+                      </p>
+                    )}
+                  </>
+                );
 
-              if (info) {
+                if (info) {
+                  return (
+                    <button
+                      key={corner}
+                      type="button"
+                      onClick={() => scrollToPurchase(info.id)}
+                      aria-label={`Jump to ${CORNER_LABELS[corner]} purchase in purchase log`}
+                      className="p-3.5 rounded-2xl bg-[#F3F4F2] border border-black/5 text-left hover:bg-[#EAECE9] active:scale-[0.98] transition-all cursor-pointer"
+                    >
+                      {cardInner}
+                    </button>
+                  );
+                }
+
                 return (
-                  <button
+                  <div
                     key={corner}
-                    type="button"
-                    onClick={() => scrollToPurchase(info.id)}
-                    aria-label={`Jump to ${CORNER_LABELS[corner]} purchase in purchase log`}
-                    className="p-3.5 rounded-2xl bg-[#F3F4F2] border border-black/5 text-left hover:bg-[#EAECE9] active:scale-[0.98] transition-all cursor-pointer"
+                    className="p-3.5 rounded-2xl bg-[#F3F4F2] border border-black/5"
                   >
                     {cardInner}
-                  </button>
+                  </div>
                 );
-              }
+              })}
+            </div>
+          </div>
+        </div>
 
-              return (
-                <div
-                  key={corner}
-                  className="p-3.5 rounded-2xl bg-[#F3F4F2] border border-black/5"
+        {/* Collapsible Contacts Bar: Top-rounded edges matching PressureLogSheet */}
+        <div className="mt-3 sm:px-6">
+          <section className="bg-[#16191D] text-white rounded-t-3xl rounded-b-none lg:rounded-3xl border-t border-x lg:border border-black/15 shadow-[0_-4px_16px_rgba(17,19,21,0.08)] overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setContactsExpanded((prev) => !prev)}
+              aria-expanded={contactsExpanded}
+              className="w-full px-5 py-4 flex items-center justify-between gap-3 text-left hover:bg-white/[0.03] transition-colors cursor-pointer"
+            >
+              <h2 className="font-display text-base font-semibold text-white">
+                Contacts
+              </h2>
+              <ChevronDown
+                className={`w-4 h-4 text-white/65 transition-transform duration-200 ${
+                  contactsExpanded ? 'rotate-180' : ''
+                }`}
+              />
+            </button>
+
+            <AnimatePresence initial={false}>
+              {contactsExpanded && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+                  className="overflow-hidden"
                 >
-                  {cardInner}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* Purchase History Logs */}
-      <section className="bg-white rounded-3xl border border-black/7 p-5">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="font-display text-base font-semibold text-[#111315]">
-            Purchase log
-          </h2>
-          <span className="text-xs text-[#5E646A] tabular-nums">
-            Newest first
-          </span>
-        </div>
-
-        {sortedPurchases.length === 0 ? (
-          <div className="py-10 text-center text-sm text-[#6B7075]">
-            No tyre purchases recorded for {car.displayTitle}. Tap + above to log your set.
-          </div>
-        ) : (
-          <ul className="divide-y divide-black/6">
-            {sortedPurchases.map((item) => {
-              const perTyre =
-                item.corners.length > 0
-                  ? Math.round((item.totalCost / item.corners.length) * 100) / 100
-                  : item.totalCost;
-              const matchedContact = findMatchingContact(item.vendor, contacts);
-              const isHighlighted = highlightedPurchaseId === item.id;
-
-              return (
-                <li
-                  key={item.id}
-                  ref={(el) => {
-                    purchaseRowRefs.current[item.id] = el;
-                  }}
-                  className={`py-4 first:pt-2 last:pb-2 transition-all duration-300 ${
-                    isHighlighted
-                      ? 'bg-[#F3F4F2] ring-2 ring-[#FF5A1F]/70 rounded-2xl px-3 -mx-3'
-                      : ''
-                  }`}
-                >
-                  <div className="flex items-stretch justify-between gap-4">
-                    <div className="min-w-0 space-y-1.5">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-display font-semibold text-base text-[#111315]">
-                          {item.brandModel}
-                        </span>
-                        <span aria-hidden="true" className="text-[#9AA0A6]">·</span>
-                        <span className="font-mono text-xs font-medium text-[#5E646A]">
-                          {item.tyreSize}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center gap-2 text-xs text-[#5E646A] flex-wrap">
-                        <span className="inline-flex items-center gap-1 text-[#111315] font-medium">
-                          <Store className="w-3.5 h-3.5 text-[#5E646A]" />
-                          {item.vendor}
-                        </span>
-                        <span aria-hidden="true" className="text-[#9AA0A6]">·</span>
-                        <span>Bought {formatDisplayDate(item.date)}</span>
-                        <span aria-hidden="true" className="text-[#9AA0A6]">·</span>
-                        <span className="font-medium text-[#111315] tabular-nums">
-                          {formatTyreAge(item.date)} old
-                        </span>
-                      </div>
-
-                      <div className="flex items-center gap-3 pt-0.5">
-                        <div
-                          className="grid grid-cols-2 gap-1 p-1 rounded-lg bg-[#F3F4F2] border border-black/5 shrink-0"
-                          aria-label={`Fitted corners: ${item.corners.join(', ')}`}
-                        >
-                          {TYRE_CORNERS.map((c) => {
-                            const active = item.corners.includes(c);
-                            return (
-                              <span
-                                key={c}
-                                className={`w-5 h-3.5 rounded-[3px] flex items-center justify-center font-mono text-[9px] font-semibold ${
-                                  active
-                                    ? 'bg-[#111315] text-white'
-                                    : 'bg-black/8 text-[#8C9298]'
-                                }`}
-                              >
-                                {c}
-                              </span>
-                            );
-                          })}
-                        </div>
-                        <span className="text-xs text-[#5E646A]">
-                          {item.corners.map((c) => CORNER_LABELS[c]).join(', ')}
-                        </span>
-                      </div>
-
-                      {item.notes && (
-                        <p className="text-xs text-[#6B7075]">{item.notes}</p>
-                      )}
-                    </div>
-
-                    <div className="flex flex-col items-end justify-between gap-2 shrink-0">
-                      <div className="flex flex-col items-end gap-1">
-                        <div className="text-right">
-                          <div className="font-display text-lg font-bold tabular-nums text-[#111315]">
-                            {formatRM(item.totalCost)}
-                          </div>
-                          <div className="font-mono text-[11px] tabular-nums text-[#5E646A]">
-                            {formatRM(perTyre)}/tyre
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => onDeletePurchase(item.id)}
-                          aria-label={`Delete purchase from ${item.vendor}`}
-                          className="min-w-[36px] min-h-[36px] rounded-full flex items-center justify-center text-[#9AA0A6] hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-
-                      {matchedContact?.phone ? (
-                        <a
-                          href={formatWhatsAppHref(matchedContact.phone)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          aria-label={`WhatsApp ${matchedContact.company}`}
-                          title={`WhatsApp ${matchedContact.company} (${matchedContact.phone})`}
-                          className="w-9 h-9 rounded-full bg-[#111315] text-white hover:bg-black/80 transition-colors flex items-center justify-center shadow-[0_2px_8px_rgba(17,19,21,0.14)]"
-                        >
-                          <WhatsAppIcon className="w-4 h-4" />
-                        </a>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => openContactForVendor(item.vendor, matchedContact)}
-                          aria-label={`Add WhatsApp number for ${item.vendor}`}
-                          title={`Add WhatsApp number for ${item.vendor}`}
-                          className="w-9 h-9 rounded-full bg-[#111315] text-white hover:bg-black/80 transition-colors flex items-center justify-center shadow-[0_2px_8px_rgba(17,19,21,0.14)] cursor-pointer"
-                        >
-                          <WhatsAppIcon className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
-
-      {/* Contacts Box: Tyre Companies, Websites, Phone Numbers & WhatsApp */}
-      <section className="bg-[#16191D] text-white rounded-3xl border border-black/15 p-5 shadow-[0_8px_24px_rgba(17,19,21,0.10)]">
-        <div className="flex items-center justify-between gap-3 mb-3">
-          <div>
-            <h2 className="font-display text-base font-semibold text-white">
-              Contacts
-            </h2>
-            <p className="text-xs text-white/65">
-              Tyre shops, maps &amp; quick WhatsApp
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={openContactModal}
-            className="min-h-[40px] px-3.5 py-1.5 rounded-full bg-white text-[#111315] text-xs font-semibold flex items-center gap-1.5 hover:bg-white/90 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Add contact</span>
-          </button>
-        </div>
-
-        {contacts.length === 0 ? (
-          <div className="py-8 text-center text-xs text-white/60">
-            No tyre shop contacts saved yet. Tap Add contact to save a shop.
-          </div>
-        ) : (
-          <ul className="divide-y divide-white/10">
-            {contacts.map((contact) => (
-              <li key={contact.id} className="py-3.5 first:pt-1 last:pb-1">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0 space-y-1">
-                    <p className="font-display font-semibold text-sm text-white truncate">
-                      {contact.company}
-                    </p>
-
-                    <div className="flex items-center gap-3 text-xs text-white/70 flex-wrap">
-                      {contact.phone && (
-                        <a
-                          href={`tel:${contact.phone.replace(/[^+\d]/g, '')}`}
-                          className="inline-flex items-center gap-1 font-mono text-white hover:underline"
-                        >
-                          <Phone className="w-3 h-3 text-white/65" />
-                          {contact.phone}
-                        </a>
-                      )}
-
-                      {contact.website && (
-                        <>
-                          {contact.phone && (
-                            <span aria-hidden="true" className="text-white/35">·</span>
-                          )}
-                          <a
-                            href={formatWebsiteHref(contact.website)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-white/80 hover:text-white underline underline-offset-2 truncate max-w-[200px]"
-                          >
-                            <Globe className="w-3 h-3 shrink-0" />
-                            <span className="truncate">
-                              {formatWebsiteLabel(contact.website)}
-                            </span>
-                          </a>
-                        </>
-                      )}
-                    </div>
-
-                    {contact.notes && (
-                      <p className="text-xs text-white/55 truncate">
-                        {contact.notes}
+                  <div className="px-5 pb-5 pt-1 border-t border-white/10">
+                    <div className="flex items-center justify-between gap-3 mb-3 pt-2.5">
+                      <p className="text-xs text-white/65">
+                        Tyre shops, maps &amp; quick WhatsApp
                       </p>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    {contact.phone ? (
-                      <a
-                        href={formatWhatsAppHref(contact.phone)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        aria-label={`Message ${contact.company} on WhatsApp`}
-                        title={`WhatsApp ${contact.company}`}
-                        className="w-10 h-10 rounded-full bg-white text-[#111315] hover:bg-white/90 transition-colors flex items-center justify-center shadow-[0_2px_10px_rgba(0,0,0,0.22)]"
-                      >
-                        <WhatsAppIcon className="w-4 h-4" />
-                      </a>
-                    ) : (
                       <button
                         type="button"
-                        onClick={() => openContactForVendor(contact.company, contact)}
-                        aria-label={`Add WhatsApp number for ${contact.company}`}
-                        title={`Add WhatsApp number for ${contact.company}`}
-                        className="w-10 h-10 rounded-full bg-white text-[#111315] hover:bg-white/90 transition-colors flex items-center justify-center shadow-[0_2px_10px_rgba(0,0,0,0.22)] cursor-pointer"
+                        onClick={openContactModal}
+                        className="min-h-[40px] px-3.5 py-1.5 rounded-full bg-white text-[#111315] text-xs font-semibold flex items-center gap-1.5 hover:bg-white/90 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
                       >
-                        <WhatsAppIcon className="w-4 h-4" />
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Add contact</span>
                       </button>
+                    </div>
+
+                    {contacts.length === 0 ? (
+                      <div className="py-6 text-center text-xs text-white/60">
+                        No tyre shop contacts saved yet. Tap Add contact to save a shop.
+                      </div>
+                    ) : (
+                      <ul className="divide-y divide-white/10">
+                        {contacts.map((contact) => (
+                          <li key={contact.id} className="py-3 first:pt-1 last:pb-1">
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="min-w-0 space-y-1">
+                                <p className="font-display font-semibold text-sm text-white truncate">
+                                  {contact.company}
+                                </p>
+
+                                <div className="flex items-center gap-3 text-xs text-white/70 flex-wrap">
+                                  {contact.phone && (
+                                    <a
+                                      href={`tel:${contact.phone.replace(/[^+\d]/g, '')}`}
+                                      className="inline-flex items-center gap-1 font-mono text-white hover:underline"
+                                    >
+                                      <Phone className="w-3 h-3 text-white/65" />
+                                      {contact.phone}
+                                    </a>
+                                  )}
+
+                                  {contact.website && (
+                                    <>
+                                      {contact.phone && (
+                                        <span aria-hidden="true" className="text-white/35">·</span>
+                                      )}
+                                      <a
+                                        href={formatWebsiteHref(contact.website)}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-1 text-white/80 hover:text-white underline underline-offset-2 truncate max-w-[200px]"
+                                      >
+                                        <Globe className="w-3 h-3 shrink-0" />
+                                        <span className="truncate">
+                                          {formatWebsiteLabel(contact.website)}
+                                        </span>
+                                      </a>
+                                    </>
+                                  )}
+                                </div>
+
+                                {contact.notes && (
+                                  <p className="text-xs text-white/55 truncate">
+                                    {contact.notes}
+                                  </p>
+                                )}
+                              </div>
+
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                {contact.phone ? (
+                                  <a
+                                    href={formatWhatsAppHref(contact.phone)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    aria-label={`Message ${contact.company} on WhatsApp`}
+                                    title={`WhatsApp ${contact.company}`}
+                                    className="w-10 h-10 rounded-full bg-white text-[#111315] hover:bg-white/90 transition-colors flex items-center justify-center shadow-[0_2px_10px_rgba(0,0,0,0.22)]"
+                                  >
+                                    <WhatsAppIcon className="w-4 h-4" />
+                                  </a>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => openContactForVendor(contact.company, contact)}
+                                    aria-label={`Add WhatsApp number for ${contact.company}`}
+                                    title={`Add WhatsApp number for ${contact.company}`}
+                                    className="w-10 h-10 rounded-full bg-white text-[#111315] hover:bg-white/90 transition-colors flex items-center justify-center shadow-[0_2px_10px_rgba(0,0,0,0.22)] cursor-pointer"
+                                  >
+                                    <WhatsAppIcon className="w-4 h-4" />
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => onDeleteContact(contact.id)}
+                                  aria-label={`Delete contact ${contact.company}`}
+                                  className="w-9 h-9 rounded-full flex items-center justify-center text-white/45 hover:text-red-400 hover:bg-white/10 transition-colors cursor-pointer"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
                     )}
-                    <button
-                      type="button"
-                      onClick={() => onDeleteContact(contact.id)}
-                      aria-label={`Delete contact ${contact.company}`}
-                      className="w-9 h-9 rounded-full flex items-center justify-center text-white/45 hover:text-red-400 hover:bg-white/10 transition-colors cursor-pointer"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
                   </div>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </section>
+        </div>
+      </motion.div>
 
       {/* Add Purchase Slide-Up Modal */}
       <AnimatePresence>
@@ -1153,6 +1207,6 @@ export function PurchasesView({
           </motion.div>
         )}
       </AnimatePresence>
-    </motion.div>
+    </>
   );
 }

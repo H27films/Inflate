@@ -4,6 +4,7 @@ import { Calendar, Check, Loader2, LocateFixed, MapPin, X } from 'lucide-react';
 import {
   CarProfile,
   CORNER_LABELS,
+  CornerPressures,
   PressureLogEntry,
   TYRE_CORNERS,
   TyreCorner,
@@ -24,8 +25,13 @@ export function QuickLogModal({ open, car, onClose, onLogCreated }: QuickLogModa
   const [detectingLoc, setDetectingLoc] = useState(false);
   const [locError, setLocError] = useState<string | null>(null);
 
+  const [beforeInputs, setBeforeInputs] = useState<Record<TyreCorner, string>>({
+    FL: '',
+    FR: '',
+    RL: '',
+    RR: '',
+  });
   const [lowCorner, setLowCorner] = useState<TyreCorner | null>(null);
-  const [beforeKpa, setBeforeKpa] = useState('');
   const [note, setNote] = useState('');
 
   useEffect(() => {
@@ -33,12 +39,12 @@ export function QuickLogModal({ open, car, onClose, onLogCreated }: QuickLogModa
 
     setDate(getTodayIso());
     setLocationText(latest?.station ?? '');
+    setBeforeInputs({ FL: '', FR: '', RL: '', RR: '' });
     setLowCorner(null);
-    setBeforeKpa('');
     setNote('');
     setLocError(null);
     setDetectingLoc(false);
-  }, [open, car.id]);
+  }, [open, car.id, latest?.station]);
 
   const handleRequestLocation = async () => {
     if (detectingLoc) return;
@@ -56,18 +62,28 @@ export function QuickLogModal({ open, car, onClose, onLogCreated }: QuickLogModa
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    const numericBefore = Number(beforeKpa);
-    const hasLowTyre = lowCorner !== null && Number.isFinite(numericBefore) && numericBefore > 0;
+    const beforePressures: Partial<CornerPressures> = {};
+    TYRE_CORNERS.forEach((corner) => {
+      const parsed = Number(beforeInputs[corner]);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        beforePressures[corner] = Math.round(parsed);
+      }
+    });
+
+    const flaggedBefore = lowCorner ? beforePressures[lowCorner] : undefined;
 
     onLogCreated({
       date,
       pressures: { ...car.recommendedKpa },
+      beforePressures:
+        Object.keys(beforePressures).length > 0 ? beforePressures : undefined,
       source: 'manual',
       station: locationText.trim() || 'Current location',
-      lowTyre: hasLowTyre
-        ? { corner: lowCorner, beforeKpa: Math.round(numericBefore) }
-        : lowCorner !== null
-          ? { corner: lowCorner }
+      lowTyre:
+        lowCorner !== null
+          ? flaggedBefore !== undefined
+            ? { corner: lowCorner, beforeKpa: flaggedBefore }
+            : { corner: lowCorner }
           : undefined,
       note: note.trim() || undefined,
     });
@@ -96,7 +112,7 @@ export function QuickLogModal({ open, car, onClose, onLogCreated }: QuickLogModa
             transition={{ type: 'spring', stiffness: 360, damping: 32 }}
             onClick={(e) => e.stopPropagation()}
             onSubmit={handleSubmit}
-            className="w-full max-w-md bg-white rounded-t-3xl sm:rounded-3xl p-5 space-y-4 shadow-2xl"
+            className="w-full max-w-md bg-white rounded-t-3xl sm:rounded-3xl p-5 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto"
           >
             <div className="flex items-center justify-between">
               <div>
@@ -170,86 +186,84 @@ export function QuickLogModal({ open, car, onClose, onLogCreated }: QuickLogModa
               </div>
             </div>
 
-            {/* Optional Low Tyre Note Area */}
-            <div className="p-3.5 rounded-2xl bg-[#F3F4F2] border border-black/6 space-y-2.5">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-medium text-[#111315]">
-                  Was a tyre very low? (optional)
+            {/* Previous Readings & Optional Low Tyre Flag */}
+            <div className="p-3.5 rounded-2xl bg-[#F3F4F2] border border-black/6 space-y-3">
+              <div className="space-y-1.5">
+                <span className="text-xs font-medium text-[#111315] block">
+                  Previous readings before top-up (kPa, optional)
                 </span>
-                {lowCorner && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setLowCorner(null);
-                      setBeforeKpa('');
-                    }}
-                    className="text-[11px] font-medium text-[#5E646A] underline underline-offset-2 cursor-pointer"
-                  >
-                    Clear
-                  </button>
-                )}
-              </div>
-
-              <div className="grid grid-cols-4 gap-2">
-                {TYRE_CORNERS.map((corner) => {
-                  const selected = lowCorner === corner;
-                  return (
-                    <button
-                      key={corner}
-                      type="button"
-                      onClick={() => setLowCorner(selected ? null : corner)}
-                      className={`h-10 rounded-xl font-mono text-xs font-semibold border transition-colors cursor-pointer ${
-                        selected
-                          ? 'bg-[#FF5A1F] text-white border-[#FF5A1F]'
-                          : 'bg-white text-[#5E646A] border-black/8 hover:text-[#111315]'
-                      }`}
-                    >
-                      {corner}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {lowCorner && (
-                <div className="grid grid-cols-2 gap-2.5 pt-1">
-                  <label className="block">
-                    <span className="text-[11px] font-medium text-[#5E646A]">
-                      {CORNER_LABELS[lowCorner]} was (kPa)
-                    </span>
-                    <input
-                      type="number"
-                      min={50}
-                      max={400}
-                      placeholder="e.g. 210"
-                      value={beforeKpa}
-                      onChange={(e) => setBeforeKpa(e.target.value)}
-                      className="mt-1 w-full h-10 px-2.5 rounded-xl bg-white border border-black/10 text-sm font-mono font-semibold tabular-nums text-[#111315]"
-                    />
-                  </label>
-                  <label className="block">
-                    <span className="text-[11px] font-medium text-[#5E646A]">
-                      Note (optional)
-                    </span>
-                    <input
-                      type="text"
-                      placeholder="e.g. Slow leak"
-                      value={note}
-                      onChange={(e) => setNote(e.target.value)}
-                      className="mt-1 w-full h-10 px-2.5 rounded-xl bg-white border border-black/10 text-xs text-[#111315]"
-                    />
-                  </label>
+                <div className="grid grid-cols-4 gap-2">
+                  {TYRE_CORNERS.map((corner) => (
+                    <label key={corner} className="block">
+                      <span className="text-[10.5px] font-mono text-[#5E646A] block">
+                        {corner}
+                      </span>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        maxLength={3}
+                        placeholder="—"
+                        aria-label={`${CORNER_LABELS[corner]} previous reading kPa`}
+                        value={beforeInputs[corner]}
+                        onChange={(e) => {
+                          const digits = e.target.value.replace(/\D/g, '').slice(0, 3);
+                          setBeforeInputs((prev) => ({
+                            ...prev,
+                            [corner]: digits,
+                          }));
+                        }}
+                        className="mt-0.5 w-full h-10 px-2 rounded-xl bg-white border border-black/10 text-sm font-mono font-semibold tabular-nums text-[#111315] text-center"
+                      />
+                    </label>
+                  ))}
                 </div>
-              )}
+              </div>
 
-              {!lowCorner && (
-                <input
-                  type="text"
-                  placeholder="Optional note (e.g. Cold morning check)"
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  className="w-full h-10 px-3 rounded-xl bg-white border border-black/8 text-xs text-[#111315]"
-                />
-              )}
+              <div className="space-y-2 pt-1 border-t border-black/6">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-medium text-[#5E646A]">
+                    Flag a low tyre (optional)
+                  </span>
+                  {lowCorner && (
+                    <button
+                      type="button"
+                      onClick={() => setLowCorner(null)}
+                      className="text-[11px] font-medium text-[#5E646A] underline underline-offset-2 cursor-pointer"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-4 gap-2">
+                  {TYRE_CORNERS.map((corner) => {
+                    const selected = lowCorner === corner;
+                    return (
+                      <button
+                        key={corner}
+                        type="button"
+                        onClick={() => setLowCorner(selected ? null : corner)}
+                        className={`h-9 rounded-xl font-mono text-xs font-semibold border transition-colors cursor-pointer ${
+                          selected
+                            ? 'bg-[#FF5A1F] text-white border-[#FF5A1F]'
+                            : 'bg-white text-[#5E646A] border-black/8 hover:text-[#111315]'
+                        }`}
+                      >
+                        {corner}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <input
+                type="text"
+                placeholder="Optional note (e.g. Cold morning check)"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                className="w-full h-10 px-3 rounded-xl bg-white border border-black/8 text-xs text-[#111315]"
+              />
             </div>
 
             <button

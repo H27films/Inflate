@@ -22,6 +22,7 @@ export interface PressureLogEntry {
   id: string;
   date: string; // YYYY-MM-DD
   pressures: CornerPressures;
+  beforePressures?: Partial<CornerPressures>;
   source: 'camera' | 'manual';
   station?: string;
   note?: string;
@@ -55,6 +56,7 @@ export interface CarProfile {
   paintHex: string;
   accentLabel: string;
   recommendedKpa: CornerPressures;
+  previousReadings?: Partial<CornerPressures>;
   defaultSizes: {
     front: string;
     rear: string;

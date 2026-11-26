@@ -46,10 +46,14 @@ export function PressureLogSheet({
   const [station, setStation] = useState('');
   const [detectingLoc, setDetectingLoc] = useState(false);
   const [locError, setLocError] = useState<string | null>(null);
+  const [beforeInputs, setBeforeInputs] = useState<Record<TyreCorner, string>>({
+    FL: '',
+    FR: '',
+    RL: '',
+    RR: '',
+  });
   const [lowCorner, setLowCorner] = useState<TyreCorner | null>(null);
-  const [beforeKpa, setBeforeKpa] = useState('');
   const [note, setNote] = useState('');
-  const [pressures, setPressures] = useState<CornerPressures>({ ...car.recommendedKpa });
 
   useEffect(() => {
     if (!expanded) {
@@ -71,10 +75,9 @@ export function PressureLogSheet({
     setStation('');
     setLocError(null);
     setDetectingLoc(false);
+    setBeforeInputs({ FL: '', FR: '', RL: '', RR: '' });
     setLowCorner(null);
-    setBeforeKpa('');
     setNote('');
-    setPressures({ ...car.recommendedKpa });
     setShowAddForm(true);
     scrollBodyRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -85,12 +88,36 @@ export function PressureLogSheet({
     setStation(entry.station ?? '');
     setLocError(null);
     setDetectingLoc(false);
+    const lowFallbackCorner = entry.lowTyre?.corner;
+    const lowFallbackVal = entry.lowTyre?.beforeKpa;
+    setBeforeInputs({
+      FL:
+        entry.beforePressures?.FL !== undefined
+          ? String(entry.beforePressures.FL)
+          : lowFallbackCorner === 'FL' && lowFallbackVal !== undefined
+            ? String(lowFallbackVal)
+            : '',
+      FR:
+        entry.beforePressures?.FR !== undefined
+          ? String(entry.beforePressures.FR)
+          : lowFallbackCorner === 'FR' && lowFallbackVal !== undefined
+            ? String(lowFallbackVal)
+            : '',
+      RL:
+        entry.beforePressures?.RL !== undefined
+          ? String(entry.beforePressures.RL)
+          : lowFallbackCorner === 'RL' && lowFallbackVal !== undefined
+            ? String(lowFallbackVal)
+            : '',
+      RR:
+        entry.beforePressures?.RR !== undefined
+          ? String(entry.beforePressures.RR)
+          : lowFallbackCorner === 'RR' && lowFallbackVal !== undefined
+            ? String(lowFallbackVal)
+            : '',
+    });
     setLowCorner(entry.lowTyre?.corner ?? null);
-    setBeforeKpa(
-      entry.lowTyre?.beforeKpa !== undefined ? String(entry.lowTyre.beforeKpa) : ''
-    );
     setNote(entry.note ?? '');
-    setPressures({ ...entry.pressures });
     setShowAddForm(true);
     scrollBodyRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -111,18 +138,28 @@ export function PressureLogSheet({
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    const numericBefore = Number(beforeKpa);
-    const hasLowTyre = lowCorner !== null && Number.isFinite(numericBefore) && numericBefore > 0;
+    const beforePressures: Partial<CornerPressures> = {};
+    TYRE_CORNERS.forEach((corner) => {
+      const parsed = Number(beforeInputs[corner]);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        beforePressures[corner] = Math.round(parsed);
+      }
+    });
+
+    const resolvedLowBefore = lowCorner ? beforePressures[lowCorner] : undefined;
 
     const payload: Omit<PressureLogEntry, 'id'> = {
       date,
-      pressures: editingId ? { ...pressures } : { ...car.recommendedKpa },
+      pressures: { ...car.recommendedKpa },
+      beforePressures:
+        Object.keys(beforePressures).length > 0 ? beforePressures : undefined,
       source: 'manual',
       station: station.trim() || undefined,
-      lowTyre: hasLowTyre
-        ? { corner: lowCorner, beforeKpa: Math.round(numericBefore) }
-        : lowCorner !== null
-          ? { corner: lowCorner }
+      lowTyre:
+        lowCorner !== null
+          ? resolvedLowBefore !== undefined
+            ? { corner: lowCorner, beforeKpa: resolvedLowBefore }
+            : { corner: lowCorner }
           : undefined,
       note: note.trim() || undefined,
     };
@@ -328,6 +365,35 @@ export function PressureLogSheet({
                     </div>
                   </div>
 
+                  <div className="space-y-1.5">
+                    <span className="text-[11px] font-medium text-[#5E646A] block">
+                      Previous readings before top-up (kPa, optional)
+                    </span>
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {TYRE_CORNERS.map((corner) => (
+                        <label key={corner} className="block">
+                          <span className="text-[10px] font-mono text-[#5E646A]">{corner} prev</span>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            pattern="[0-9]*"
+                            maxLength={3}
+                            placeholder="—"
+                            value={beforeInputs[corner]}
+                            onChange={(e) => {
+                              const digits = e.target.value.replace(/\D/g, '').slice(0, 3);
+                              setBeforeInputs((prev) => ({
+                                ...prev,
+                                [corner]: digits,
+                              }));
+                            }}
+                            className="mt-0.5 w-full h-9 px-2 rounded-lg bg-white border border-black/10 text-xs font-mono font-semibold tabular-nums text-[#111315] text-center"
+                          />
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
                   <div className="space-y-2">
                     <span className="text-[11px] font-medium text-[#5E646A] block">
                       Flag low tyre before top-up (optional)
@@ -351,47 +417,7 @@ export function PressureLogSheet({
                         );
                       })}
                     </div>
-
-                    {lowCorner && (
-                      <label className="block">
-                        <span className="text-[11px] font-medium text-[#5E646A]">
-                          {CORNER_LABELS[lowCorner]} reading before top-up (kPa, optional)
-                        </span>
-                        <input
-                          type="number"
-                          min={50}
-                          max={400}
-                          placeholder="e.g. 180"
-                          value={beforeKpa}
-                          onChange={(e) => setBeforeKpa(e.target.value)}
-                          className="mt-1 w-full h-10 px-2.5 rounded-xl bg-white border border-black/10 text-sm font-mono font-semibold tabular-nums text-[#111315]"
-                        />
-                      </label>
-                    )}
                   </div>
-
-                  {editingId && (
-                    <div className="grid grid-cols-4 gap-1.5">
-                      {TYRE_CORNERS.map((corner) => (
-                        <label key={corner} className="block">
-                          <span className="text-[10px] font-mono text-[#5E646A]">{corner} kPa</span>
-                          <input
-                            type="number"
-                            min={100}
-                            max={400}
-                            value={pressures[corner]}
-                            onChange={(e) =>
-                              setPressures((prev) => ({
-                                ...prev,
-                                [corner]: Number(e.target.value) || 0,
-                              }))
-                            }
-                            className="mt-0.5 w-full h-9 px-2 rounded-lg bg-white border border-black/10 text-xs font-mono font-semibold tabular-nums text-[#111315]"
-                          />
-                        </label>
-                      ))}
-                    </div>
-                  )}
 
                   <label className="block">
                     <span className="text-[11px] font-medium text-[#5E646A]">Note (optional)</span>
@@ -448,6 +474,20 @@ export function PressureLogSheet({
 
                       const isEditingRow = editingId === entry.id && showAddForm;
 
+                      const prevByCorner: Partial<Record<TyreCorner, number>> = {
+                        ...(entry.beforePressures ?? {}),
+                      };
+                      if (
+                        entry.lowTyre?.corner &&
+                        entry.lowTyre.beforeKpa !== undefined &&
+                        prevByCorner[entry.lowTyre.corner] === undefined
+                      ) {
+                        prevByCorner[entry.lowTyre.corner] = entry.lowTyre.beforeKpa;
+                      }
+                      const hasPrevValues = TYRE_CORNERS.some(
+                        (c) => prevByCorner[c] !== undefined
+                      );
+
                       return (
                         <li key={entry.id} className="py-1 first:pt-0 last:pb-0">
                           <div
@@ -487,13 +527,16 @@ export function PressureLogSheet({
                                 )}
                               </div>
 
-                              <div className="mt-1 flex items-center gap-3 font-mono text-xs tabular-nums text-[#111315]">
-                                <span>FL {entry.pressures.FL}</span>
-                                <span>FR {entry.pressures.FR}</span>
-                                <span>RL {entry.pressures.RL}</span>
-                                <span>RR {entry.pressures.RR}</span>
-                                <span className="text-[#6B7075]">kPa</span>
-                              </div>
+                              {hasPrevValues && (
+                                <div className="mt-1 flex items-center gap-3 font-mono text-xs tabular-nums text-[#111315]">
+                                  {TYRE_CORNERS.map((c) => (
+                                    <span key={c}>
+                                      {c} {prevByCorner[c] ?? '—'}
+                                    </span>
+                                  ))}
+                                  <span className="text-[#6B7075]">kPa</span>
+                                </div>
+                              )}
 
                               {lowWarningText && (
                                 <p className="mt-1 inline-flex items-center gap-1.5 text-xs font-medium text-[#D9480F]">

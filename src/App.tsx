@@ -12,7 +12,8 @@ import {
 } from './types';
 import {
   formatDisplayDate,
-  formatRelativeDays,
+  formatTyreAge,
+  getCornerPurchaseInfo,
   getDaysSince,
   INITIAL_CONTACTS,
   INITIAL_GARAGE,
@@ -188,19 +189,6 @@ export default function App() {
       {/* Top Bar: Left Add Purchase (on Purchases) · Centered clickable INFLATE · Top-Right Switch Cars */}
       <header className="shrink-0 z-20 bg-[#F3F4F2] border-b border-black/6">
         <div className="max-w-5xl mx-auto px-4 h-12 relative flex items-center justify-center">
-          {activeTab === 'garage' && daysSinceLastTopUp !== null && (
-            <button
-              type="button"
-              onClick={() => setLogExpanded((prev) => !prev)}
-              aria-label={`${daysSinceLastTopUp} days since last top up`}
-              title={`${daysSinceLastTopUp} ${daysSinceLastTopUp === 1 ? 'day' : 'days'} since last top up`}
-              className={`absolute left-3 w-10 h-10 rounded-full bg-[#111315] text-white font-mono font-bold tabular-nums shadow-[0_2px_8px_rgba(17,19,21,0.14)] hover:bg-black/85 active:scale-[0.96] transition-all flex items-center justify-center cursor-pointer ${
-                daysSinceLastTopUp >= 100 ? 'text-xs' : 'text-sm'
-              }`}
-            >
-              {daysSinceLastTopUp}
-            </button>
-          )}
 
           {activeTab === 'purchases' && (
             <button
@@ -208,9 +196,9 @@ export default function App() {
               onClick={() => setAddPurchaseOpen(true)}
               aria-label="Add tyre purchase"
               title="Add tyre purchase"
-              className="absolute left-3 w-10 h-10 rounded-full bg-white border border-black/8 shadow-[0_2px_8px_rgba(17,19,21,0.04)] hover:bg-black/[0.02] active:scale-[0.96] transition-all flex items-center justify-center cursor-pointer"
+              className="absolute left-3 w-10 h-10 rounded-full bg-[#111315] text-white shadow-[0_2px_8px_rgba(17,19,21,0.14)] hover:bg-black/85 active:scale-[0.96] transition-all flex items-center justify-center cursor-pointer"
             >
-              <Plus className="w-4 h-4 text-[#111315]" />
+              <Plus className="w-4 h-4 text-white" />
             </button>
           )}
 
@@ -239,7 +227,7 @@ export default function App() {
       </header>
 
       {activeTab === 'purchases' ? (
-        <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 pt-4 pb-20">
+        <main className="flex-1 flex flex-col w-full pb-[calc(3.5rem+env(safe-area-inset-bottom))]">
           <PurchasesView
             car={carWithSortedLogs}
             contacts={contacts}
@@ -257,26 +245,34 @@ export default function App() {
         <main className="flex-1 min-h-0 max-w-5xl w-full mx-auto pt-2.5 pb-[calc(3.5rem+max(0.75rem,env(safe-area-inset-bottom)))] flex flex-col justify-between gap-2 lg:px-6 lg:grid lg:grid-cols-12 lg:gap-5 lg:py-4 lg:pb-20">
           {/* Top / Left Section: Vehicle Title + Last Top-Up + Bird's-Eye Image + FL/FR/RL/RR Boxes */}
           <section className="flex-1 min-h-0 px-4 lg:px-0 flex flex-col gap-2 lg:col-span-7">
-            <div className="shrink-0 flex items-baseline justify-between gap-2 px-0.5">
-              <div>
+            <div className="shrink-0 px-0.5 space-y-0.5">
+              <div className="flex items-baseline justify-between gap-2">
                 <h1 className="font-display text-xl sm:text-2xl font-medium tracking-tight text-[#111315] leading-tight">
                   {activeCar.displayTitle}
                 </h1>
-                <p className="text-xs text-[#5E646A] mt-0.5 tabular-nums">
+                {daysSinceLastTopUp !== null && (
+                  <span className="font-display text-xl sm:text-2xl font-light tracking-tight text-[#5E646A] tabular-nums leading-tight shrink-0">
+                    {daysSinceLastTopUp === 0
+                      ? 'Today'
+                      : daysSinceLastTopUp === 1
+                        ? '1 day'
+                        : `${daysSinceLastTopUp} days`}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-baseline justify-between gap-2">
+                <p className="text-xs text-[#5E646A] tabular-nums">
                   Last Top Up:{' '}
                   <span className="font-medium text-[#111315]">
                     {latestPressure ? formatDisplayDate(latestPressure.date) : '—'}
                   </span>
-                  {latestPressure && (
-                    <> · {formatRelativeDays(latestPressure.date)}</>
-                  )}
                 </p>
+                {selectedCorner && (
+                  <span className="text-xs font-medium text-[#FF5A1F] shrink-0">
+                    {CORNER_LABELS[selectedCorner]}
+                  </span>
+                )}
               </div>
-              {selectedCorner && (
-                <span className="text-xs font-medium text-[#FF5A1F] shrink-0">
-                  {CORNER_LABELS[selectedCorner]}
-                </span>
-              )}
             </div>
 
             {/* Bird's-Eye Car Image without box */}
@@ -288,14 +284,13 @@ export default function App() {
               />
             </div>
 
-            {/* 4 Corner Boxes: FL, FR, RL, RR using kPa as main */}
+            {/* 4 Corner Boxes: FL, FR, RL, RR showing set kPa, PSI top-right, and age bottom-right */}
             <div className="shrink-0 grid grid-cols-2 gap-2">
               {TYRE_CORNERS.map((corner) => {
-                const currentKpa =
-                  latestPressure?.pressures[corner] ??
-                  activeCar.recommendedKpa[corner];
-                const targetKpa = activeCar.recommendedKpa[corner];
-                const psiApprox = Math.round(currentKpa * 0.145);
+                const setKpa = activeCar.recommendedKpa[corner];
+                const psiApprox = Math.round(setKpa * 0.145);
+                const purchaseInfo = getCornerPurchaseInfo(activeCar.purchaseLogs, corner);
+                const tyreAge = purchaseInfo ? formatTyreAge(purchaseInfo.date) : null;
                 const isSelected = selectedCorner === corner;
 
                 return (
@@ -318,24 +313,35 @@ export default function App() {
                         {corner}
                       </span>
                       <span
-                        className={`font-mono text-[10px] sm:text-[11px] tracking-tight tabular-nums whitespace-nowrap ${
+                        className={`font-mono text-[10.5px] sm:text-[11px] tracking-tight tabular-nums whitespace-nowrap ${
                           isSelected ? 'text-white/70' : 'text-[#6B7075]'
                         }`}
                       >
-                        Target {targetKpa} · {psiApprox} PSI
+                        {psiApprox} PSI
                       </span>
                     </div>
-                    <div className="mt-0.5 flex items-baseline gap-1">
-                      <span className="font-display text-xl font-bold tabular-nums leading-none">
-                        {currentKpa}
-                      </span>
-                      <span
-                        className={`text-[11px] font-mono ${
-                          isSelected ? 'text-white/70' : 'text-[#5E646A]'
-                        }`}
-                      >
-                        kPa
-                      </span>
+                    <div className="mt-0.5 flex items-baseline justify-between gap-2">
+                      <div className="flex items-baseline gap-1">
+                        <span className="font-display text-xl font-bold tabular-nums leading-none">
+                          {setKpa}
+                        </span>
+                        <span
+                          className={`text-[11px] font-mono ${
+                            isSelected ? 'text-white/70' : 'text-[#5E646A]'
+                          }`}
+                        >
+                          kPa
+                        </span>
+                      </div>
+                      {tyreAge && (
+                        <span
+                          className={`font-mono text-xs font-semibold tabular-nums whitespace-nowrap ${
+                            isSelected ? 'text-white/80' : 'text-[#5E646A]'
+                          }`}
+                        >
+                          {tyreAge}
+                        </span>
+                      )}
                     </div>
                   </button>
                 );

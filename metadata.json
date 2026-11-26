@@ -1,6 +1,6 @@
 {
   "name": "Inflate",
   "description": "Sleek mobile tyre pressure, age, and purchase tracker for your garage.",
-  "requestFramePermissions": ["camera"],
+  "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

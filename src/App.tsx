@@ -183,9 +183,19 @@ export default function App() {
     try {
       await signInWithPopup(auth, googleProvider);
     } catch (error) {
-      const message =
+      const rawMessage =
         error instanceof Error ? error.message : 'Unable to sign in with Google.';
-      setAuthError(message);
+      const isUnauthorizedDomain =
+        rawMessage.includes('auth/unauthorized-domain') ||
+        (typeof error === 'object' &&
+          error !== null &&
+          'code' in error &&
+          (error as { code?: unknown }).code === 'auth/unauthorized-domain');
+      setAuthError(
+        isUnauthorizedDomain
+          ? `Unauthorized domain (${window.location.hostname}). Add this domain in Firebase Console → Authentication → Settings → Authorized domains.`
+          : rawMessage
+      );
     } finally {
       setSigningIn(false);
     }

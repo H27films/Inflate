@@ -66,97 +66,97 @@ function WheelIcon({
 }
 
 export function BottomNav({ activeTab, onSelectTab, onOpenLog }: BottomNavProps) {
-  return (
-    <footer
-      aria-label="Primary navigation"
-      className="fixed bottom-0 left-0 right-0 z-40 bg-gradient-to-b from-[#ECEDEA]/95 to-[#DFE1DD]/95 backdrop-blur-md pt-1.5 pb-[calc(0.375rem+env(safe-area-inset-bottom))] flex justify-center"
-    >
-      <nav className="relative inline-grid grid-cols-3 gap-10 sm:gap-12 px-1.5 pt-1">
-        {/* Outer capsule surrounding only the circular icons */}
-        <div
-          aria-hidden="true"
-          className="absolute inset-x-0 top-0 h-[48px] rounded-full bg-[#F5F6F4] border border-black/8 shadow-[0_2px_8px_rgba(17,19,21,0.06)] pointer-events-none"
-        />
+  const isGarage = activeTab === 'garage';
+  const isPurchases = activeTab === 'purchases';
 
-        <button
+  return (
+    <div
+      aria-label="Primary navigation"
+      className="fixed inset-x-0 bottom-0 z-40 pointer-events-none pb-[calc(0.65rem+env(safe-area-inset-bottom))] flex justify-center"
+    >
+      {/* Frosted blur layer from bottom edge up to the top line of the bottom nav */}
+      <div
+        aria-hidden="true"
+        className="absolute inset-0 bg-gradient-to-t from-[#F3F4F2]/95 via-[#F3F4F2]/85 to-[#F3F4F2]/65 backdrop-blur-xl"
+      />
+
+      <nav className="relative z-10 pointer-events-auto inline-flex items-center gap-1.5 p-1.5 rounded-full bg-[#E5E7E3]/92 backdrop-blur-md border border-black/8 shadow-[0_8px_24px_rgba(17,19,21,0.10)]">
+        <motion.button
+          layout
           type="button"
           onClick={() => onSelectTab('garage')}
           aria-label="Home"
-          aria-current={activeTab === 'garage' ? 'page' : undefined}
-          className="relative z-10 flex flex-col items-center gap-2 group cursor-pointer"
+          aria-current={isGarage ? 'page' : undefined}
+          transition={{ type: 'spring', stiffness: 440, damping: 34 }}
+          className={`h-11 rounded-full flex items-center cursor-pointer transition-colors ${
+            isGarage
+              ? 'bg-[#111315] text-white p-1 pr-4 gap-2.5 shadow-[0_2px_8px_rgba(17,19,21,0.16)]'
+              : 'w-11 justify-center bg-white text-[#111315] hover:bg-white/90 shadow-[0_1px_3px_rgba(17,19,21,0.06)]'
+          }`}
         >
-          <span className="relative w-10 h-10 rounded-full group-hover:bg-black/[0.04] flex items-center justify-center transition-colors">
-            {activeTab === 'garage' && (
-              <motion.span
-                layoutId="bottom-nav-active-circle"
-                transition={{ type: 'spring', stiffness: 420, damping: 32 }}
-                className="absolute inset-0 rounded-full bg-[#111315] shadow-[0_2px_8px_rgba(17,19,21,0.18)]"
-              />
-            )}
-            <Home
-              className={`relative z-10 w-[18px] h-[18px] transition-colors ${
-                activeTab === 'garage' ? 'text-white' : 'text-[#6B7075]'
-              }`}
-              strokeWidth={activeTab === 'garage' ? 2.1 : 1.7}
-            />
-          </span>
           <span
-            className={`h-3 text-[10.5px] leading-[12px] tracking-tight transition-colors ${
-              activeTab === 'garage'
-                ? 'font-semibold text-[#111315]'
-                : 'font-medium text-[#6B7075]'
+            className={`rounded-full flex items-center justify-center shrink-0 transition-colors ${
+              isGarage ? 'w-9 h-9 bg-white text-[#111315]' : 'w-full h-full'
             }`}
           >
-            Home
+            <Home
+              className="w-[18px] h-[18px]"
+              strokeWidth={isGarage ? 2 : 1.75}
+            />
           </span>
-        </button>
+          {isGarage && (
+            <motion.span
+              initial={{ opacity: 0, x: -4 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.16 }}
+              className="text-[13px] font-medium tracking-tight text-white whitespace-nowrap"
+            >
+              Home
+            </motion.span>
+          )}
+        </motion.button>
 
-        <button
+        <motion.button
+          layout
           type="button"
           onClick={() => onSelectTab('purchases')}
           aria-label="Past"
-          aria-current={activeTab === 'purchases' ? 'page' : undefined}
-          className="relative z-10 flex flex-col items-center gap-2 group cursor-pointer"
+          aria-current={isPurchases ? 'page' : undefined}
+          transition={{ type: 'spring', stiffness: 440, damping: 34 }}
+          className={`h-11 rounded-full flex items-center cursor-pointer transition-colors ${
+            isPurchases
+              ? 'bg-[#111315] text-white p-1 pr-4 gap-2.5 shadow-[0_2px_8px_rgba(17,19,21,0.16)]'
+              : 'w-11 justify-center bg-white text-[#111315] hover:bg-white/90 shadow-[0_1px_3px_rgba(17,19,21,0.06)]'
+          }`}
         >
-          <span className="relative w-10 h-10 rounded-full group-hover:bg-black/[0.04] flex items-center justify-center transition-colors">
-            {activeTab === 'purchases' && (
-              <motion.span
-                layoutId="bottom-nav-active-circle"
-                transition={{ type: 'spring', stiffness: 420, damping: 32 }}
-                className="absolute inset-0 rounded-full bg-[#111315] shadow-[0_2px_8px_rgba(17,19,21,0.18)]"
-              />
-            )}
-            <WheelIcon
-              className={`relative z-10 w-[25px] h-[25px] transition-colors ${
-                activeTab === 'purchases' ? 'text-white' : 'text-[#6B7075]'
-              }`}
-            />
-          </span>
           <span
-            className={`h-3 text-[10.5px] leading-[12px] tracking-tight transition-colors ${
-              activeTab === 'purchases'
-                ? 'font-semibold text-[#111315]'
-                : 'font-medium text-[#6B7075]'
+            className={`rounded-full flex items-center justify-center shrink-0 transition-colors ${
+              isPurchases ? 'w-9 h-9 bg-white text-[#111315]' : 'w-full h-full'
             }`}
           >
-            Past
+            <WheelIcon className="w-[23px] h-[23px]" />
           </span>
-        </button>
+          {isPurchases && (
+            <motion.span
+              initial={{ opacity: 0, x: -4 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.16 }}
+              className="text-[13px] font-medium tracking-tight text-white whitespace-nowrap"
+            >
+              Past
+            </motion.span>
+          )}
+        </motion.button>
 
         <button
           type="button"
           onClick={onOpenLog}
           aria-label="Log"
-          className="relative z-10 flex flex-col items-center gap-2 group cursor-pointer"
+          className="w-11 h-11 rounded-full bg-white text-[#FF5A1F] hover:bg-white/90 active:scale-[0.94] shadow-[0_1px_3px_rgba(17,19,21,0.06)] transition-all flex items-center justify-center shrink-0 cursor-pointer"
         >
-          <span className="w-10 h-10 rounded-full bg-[#D7D9D6] group-hover:bg-[#CFD1CE] text-[#FF5A1F] group-active:scale-[0.94] transition-all flex items-center justify-center">
-            <MapPinPlus className="w-[18px] h-[18px]" strokeWidth={1.9} />
-          </span>
-          <span className="h-3 text-[10.5px] leading-[12px] tracking-tight font-semibold text-[#FF5A1F]">
-            Log
-          </span>
+          <MapPinPlus className="w-[18px] h-[18px]" strokeWidth={1.9} />
         </button>
       </nav>
-    </footer>
+    </div>
   );
 }

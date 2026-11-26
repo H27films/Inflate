@@ -80,15 +80,17 @@ export function BottomNav({
       aria-label="Primary navigation"
       className="fixed inset-x-0 bottom-0 z-40 pointer-events-none pb-[calc(0.65rem+env(safe-area-inset-bottom))] flex justify-center"
     >
-      {/* Frosted blur layer from bottom edge up to the top line of the bottom nav */}
-      <div
-        aria-hidden="true"
-        className={`absolute inset-0 backdrop-blur-xl transition-colors duration-200 ${
-          lightSurface
-            ? 'bg-gradient-to-b from-white/70 via-white/92 to-[#EAECE8]/95'
-            : 'bg-gradient-to-t from-[#F3F4F2]/95 via-[#F3F4F2]/85 to-[#F3F4F2]/65'
-        }`}
-      />
+      {/* Frosted blur layer: preserved on expanded sheet and Past tab; seamless on collapsed Home */}
+      {(lightSurface || isPurchases) && (
+        <div
+          aria-hidden="true"
+          className={`absolute inset-0 backdrop-blur-xl transition-colors duration-200 ${
+            lightSurface
+              ? 'bg-gradient-to-b from-white/70 via-white/92 to-[#EAECE8]/95'
+              : 'bg-gradient-to-t from-[#F3F4F2]/95 via-[#F3F4F2]/85 to-[#F3F4F2]/65'
+          }`}
+        />
+      )}
 
       <nav className="relative z-10 pointer-events-auto inline-flex items-center gap-1.5 p-1.5 rounded-full bg-[#E5E7E3]/92 backdrop-blur-md border border-black/8 shadow-[0_8px_24px_rgba(17,19,21,0.10)]">
         <motion.button

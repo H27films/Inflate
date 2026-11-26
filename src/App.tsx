@@ -397,7 +397,12 @@ export default function App() {
         </main>
       ) : (
         /* Single-page zero-scroll Home layout */
-        <main className="flex-1 min-h-0 max-w-5xl w-full mx-auto pt-2.5 pb-[calc(4.7rem+env(safe-area-inset-bottom))] flex flex-col justify-between gap-2 lg:px-6 lg:grid lg:grid-cols-12 lg:gap-5 lg:py-4 lg:pb-24">
+        <>
+          <div
+            aria-hidden="true"
+            className="pointer-events-none fixed inset-x-0 bottom-0 h-44 z-0 bg-gradient-to-b from-transparent via-[#E8EAE6]/75 to-[#D6DAD3]"
+          />
+          <main className="relative z-10 flex-1 min-h-0 max-w-5xl w-full mx-auto pt-2.5 pb-[calc(4.7rem+env(safe-area-inset-bottom))] flex flex-col justify-between gap-2 lg:px-6 lg:grid lg:grid-cols-12 lg:gap-5 lg:py-4 lg:pb-24">
           {/* Top / Left Section: Vehicle Title + Last Top-Up + Bird's-Eye Image + FL/FR/RL/RR Boxes */}
           <section className="flex-1 min-h-0 px-4 lg:px-0 flex flex-col gap-2 lg:col-span-7">
             <div className="shrink-0 px-0.5 space-y-0.5">
@@ -516,7 +521,8 @@ export default function App() {
               onDeleteLog={handleDeletePressureLog}
             />
           </div>
-        </main>
+          </main>
+        </>
       )}
 
       {/* Sticky Bottom Navigation Bar: Home (Left) · Purchases (Middle) · Log (Right) */}

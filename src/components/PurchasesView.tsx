@@ -14,6 +14,7 @@ import {
   formatTyreAge,
   getCornerPurchaseInfo,
   getTodayIso,
+  parseLocalDate,
 } from '../data/initialGarage';
 
 interface PurchasesViewProps {
@@ -33,6 +34,12 @@ function formatRM(amount: number): string {
     minimumFractionDigits: amount % 1 === 0 ? 0 : 2,
     maximumFractionDigits: 2,
   })}`;
+}
+
+function formatPurchaseDateDash(dateStr: string): string {
+  const dt = parseLocalDate(dateStr);
+  const month = dt.toLocaleDateString('en-US', { month: 'short' });
+  return `${month} ${dt.getDate()} - ${dt.getFullYear()}`;
 }
 
 function formatWhatsAppHref(phone: string): string {
@@ -309,6 +316,7 @@ export function PurchasesView({
   onDeleteContact,
 }: PurchasesViewProps) {
   const [showContactModal, setShowContactModal] = useState(false);
+  const [purchaseLogExpanded, setPurchaseLogExpanded] = useState(true);
   const [installationsExpanded, setInstallationsExpanded] = useState(false);
   const [contactsExpanded, setContactsExpanded] = useState(false);
   const [editingContactId, setEditingContactId] = useState<string | null>(null);
@@ -390,11 +398,20 @@ export function PurchasesView({
   }, [installationsExpanded]);
 
   const scrollToPurchase = (purchaseId: string) => {
-    const el = purchaseRowRefs.current[purchaseId];
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      setHighlightedPurchaseId(purchaseId);
+    const wasCollapsed = !purchaseLogExpanded;
+    if (wasCollapsed) {
+      setPurchaseLogExpanded(true);
     }
+    window.setTimeout(
+      () => {
+        const el = purchaseRowRefs.current[purchaseId];
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          setHighlightedPurchaseId(purchaseId);
+        }
+      },
+      wasCollapsed ? 260 : 0
+    );
   };
 
   const sortedPurchases = [...car.purchaseLogs].sort((a, b) =>
@@ -557,23 +574,43 @@ export function PurchasesView({
             </div>
           </section>
 
-          {/* Purchase History Logs */}
-          <section className="bg-white rounded-3xl border border-black/7 p-4 sm:p-5">
-            <div className="flex items-center justify-between mb-3">
+          {/* Purchase History Logs (Expanded by default, collapsible) */}
+          <section className="bg-white rounded-3xl border border-black/7 overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setPurchaseLogExpanded((prev) => !prev)}
+              aria-expanded={purchaseLogExpanded}
+              className="w-full px-4 sm:px-5 py-4 flex items-center justify-between gap-3 text-left hover:bg-black/[0.015] transition-colors cursor-pointer"
+            >
               <h2 className="font-display text-base font-semibold text-[#111315]">
                 Purchase log
               </h2>
-              <span className="text-xs text-[#5E646A] tabular-nums">
-                Newest first
+              <span className="inline-flex items-center gap-1.5 text-xs text-[#5E646A] tabular-nums">
+                {purchaseLogExpanded && <span>Newest first</span>}
+                <ChevronDown
+                  className={`w-4 h-4 transition-transform duration-300 ${
+                    purchaseLogExpanded ? 'rotate-180' : ''
+                  }`}
+                />
               </span>
-            </div>
+            </button>
 
-            {sortedPurchases.length === 0 ? (
-              <div className="py-10 text-center text-sm text-[#6B7075]">
-                No tyre purchases recorded for {car.displayTitle}. Tap + above to log your set.
-              </div>
-            ) : (
-              <ul className="divide-y divide-black/6">
+            <AnimatePresence initial={false}>
+              {purchaseLogExpanded && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.28, ease: [0.42, 0, 0.58, 1] }}
+                  className="overflow-hidden"
+                >
+                  <div className="px-4 sm:px-5 pb-4 sm:pb-5 border-t border-black/6 pt-2">
+                    {sortedPurchases.length === 0 ? (
+                      <div className="py-10 text-center text-sm text-[#6B7075]">
+                        No tyre purchases recorded for {car.displayTitle}. Tap + above to log your set.
+                      </div>
+                    ) : (
+                      <ul className="divide-y divide-black/6">
                 {sortedPurchases.map((item) => {
                   const perTyre =
                     item.corners.length > 0
@@ -594,111 +631,116 @@ export function PurchasesView({
                           : ''
                       }`}
                     >
-                      <div className="flex items-stretch justify-between gap-4">
-                        <div className="min-w-0 space-y-1.5">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-display font-semibold text-base text-[#111315]">
+                      <div className="space-y-1">
+                        {/* Row 1: Larger, thinner date */}
+                        <p className="font-display text-lg font-light tracking-tight text-[#5E646A] tabular-nums leading-tight">
+                          {formatPurchaseDateDash(item.date)}
+                        </p>
+
+                        {/* Row 2: Top-aligned details/badge/price with bottom-aligned action buttons */}
+                        <div className="flex items-stretch gap-2.5">
+                          <div className="min-w-0 flex-1">
+                            <p className="font-display font-semibold text-base text-[#111315] leading-[1.15]">
                               {item.brandModel}
-                            </span>
-                            <span aria-hidden="true" className="text-[#9AA0A6]">·</span>
-                            <span className="font-mono text-xs font-medium text-[#5E646A]">
-                              {item.tyreSize}
-                            </span>
-                          </div>
-
-                          <div className="flex items-center gap-2 text-xs text-[#5E646A] flex-wrap">
-                            <span className="inline-flex items-center gap-1 text-[#111315] font-medium">
-                              <Store className="w-3.5 h-3.5 text-[#5E646A]" />
-                              {item.vendor}
-                            </span>
-                            <span aria-hidden="true" className="text-[#9AA0A6]">·</span>
-                            <span>Bought {formatDisplayDate(item.date)}</span>
-                            <span aria-hidden="true" className="text-[#9AA0A6]">·</span>
-                            <span className="font-medium text-[#111315] tabular-nums">
-                              {formatTyreAge(item.date)} old
-                            </span>
-                          </div>
-
-                          <div className="flex items-center gap-3 pt-0.5">
-                            <div
-                              className="grid grid-cols-2 gap-1 p-1 rounded-lg bg-[#F3F4F2] border border-black/5 shrink-0"
-                              aria-label={`Fitted corners: ${item.corners.join(', ')}`}
-                            >
-                              {TYRE_CORNERS.map((c) => {
-                                const active = item.corners.includes(c);
-                                return (
-                                  <span
-                                    key={c}
-                                    className={`w-5 h-3.5 rounded-[3px] flex items-center justify-center font-mono text-[9px] font-semibold ${
-                                      active
-                                        ? 'bg-[#111315] text-white'
-                                        : 'bg-black/8 text-[#8C9298]'
-                                    }`}
-                                  >
-                                    {c}
-                                  </span>
-                                );
-                              })}
+                            </p>
+                            <div className="mt-0.5 flex items-center gap-1.5 text-xs text-[#5E646A] flex-wrap leading-snug">
+                              <span className="font-mono font-medium text-[#5E646A]">
+                                {item.tyreSize}
+                              </span>
+                              <span aria-hidden="true" className="text-[#9AA0A6]">·</span>
+                              <span className="inline-flex items-center gap-1 text-[#111315] font-medium">
+                                <Store className="w-3.5 h-3.5 text-[#5E646A] shrink-0" />
+                                {item.vendor}
+                              </span>
                             </div>
-                            <span className="text-xs text-[#5E646A]">
-                              {item.corners.map((c) => CORNER_LABELS[c]).join(', ')}
-                            </span>
+
+                            {item.notes && (
+                              <p className="mt-1.5 text-xs text-[#6B7075] leading-relaxed">
+                                {item.notes}
+                              </p>
+                            )}
                           </div>
 
-                          {item.notes && (
-                            <p className="text-xs text-[#6B7075]">{item.notes}</p>
-                          )}
-                        </div>
+                          <div
+                            className="self-start grid grid-cols-2 gap-1 p-1 rounded-lg bg-[#F3F4F2] border border-black/5 shrink-0"
+                            aria-label={`Fitted corners: ${item.corners.join(', ')}`}
+                          >
+                            {TYRE_CORNERS.map((c) => {
+                              const active = item.corners.includes(c);
+                              return (
+                                <span
+                                  key={c}
+                                  className={`w-[18px] h-[13px] rounded-[3px] flex items-center justify-center font-mono text-[8.5px] font-semibold ${
+                                    active
+                                      ? 'bg-[#111315] text-white'
+                                      : 'bg-black/8 text-[#8C9298]'
+                                  }`}
+                                >
+                                  {c}
+                                </span>
+                              );
+                            })}
+                          </div>
 
-                        <div className="flex flex-col items-end justify-between gap-2 shrink-0">
-                          <div className="flex flex-col items-end gap-1">
-                            <div className="text-right">
-                              <div className="font-display text-lg font-bold tabular-nums text-[#111315]">
+                          <div className="min-w-[86px] flex flex-col items-end justify-between gap-2 shrink-0 text-right">
+                            <div>
+                              <div className="font-display text-lg font-bold tabular-nums text-[#111315] leading-[1.05]">
                                 {formatRM(item.totalCost)}
                               </div>
-                              <div className="font-mono text-[11px] tabular-nums text-[#5E646A]">
+                              <div className="mt-0.5 font-mono text-[11px] tabular-nums text-[#5E646A] leading-tight">
                                 {formatRM(perTyre)}/tyre
                               </div>
+                              <div className="mt-0.5 text-[11px] font-medium tabular-nums text-[#111315] leading-tight">
+                                <span aria-hidden="true" className="text-[#9AA0A6] mr-1">·</span>
+                                {formatTyreAge(item.date)} old
+                              </div>
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => onDeletePurchase(item.id)}
-                              aria-label={`Delete purchase from ${item.vendor}`}
-                              className="min-w-[36px] min-h-[36px] rounded-full flex items-center justify-center text-[#9AA0A6] hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
 
-                          {matchedContact?.phone ? (
-                            <a
-                              href={formatWhatsAppHref(matchedContact.phone)}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              aria-label={`WhatsApp ${matchedContact.company}`}
-                              title={`WhatsApp ${matchedContact.company} (${matchedContact.phone})`}
-                              className="w-9 h-9 rounded-full bg-[#111315] text-white hover:bg-black/80 transition-colors flex items-center justify-center shadow-[0_2px_8px_rgba(17,19,21,0.14)]"
-                            >
-                              <WhatsAppIcon className="w-4 h-4" />
-                            </a>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => openContactForVendor(item.vendor, matchedContact)}
-                              aria-label={`Add WhatsApp number for ${item.vendor}`}
-                              title={`Add WhatsApp number for ${item.vendor}`}
-                              className="w-9 h-9 rounded-full bg-[#111315] text-white hover:bg-black/80 transition-colors flex items-center justify-center shadow-[0_2px_8px_rgba(17,19,21,0.14)] cursor-pointer"
-                            >
-                              <WhatsAppIcon className="w-4 h-4" />
-                            </button>
-                          )}
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => onDeletePurchase(item.id)}
+                                aria-label={`Delete purchase from ${item.vendor}`}
+                                className="w-9 h-9 rounded-full flex items-center justify-center text-[#9AA0A6] hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+
+                              {matchedContact?.phone ? (
+                                <a
+                                  href={formatWhatsAppHref(matchedContact.phone)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  aria-label={`WhatsApp ${matchedContact.company}`}
+                                  title={`WhatsApp ${matchedContact.company} (${matchedContact.phone})`}
+                                  className="w-9 h-9 rounded-full bg-[#111315] text-white hover:bg-black/80 transition-colors flex items-center justify-center shadow-[0_2px_8px_rgba(17,19,21,0.14)]"
+                                >
+                                  <WhatsAppIcon className="w-4 h-4" />
+                                </a>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => openContactForVendor(item.vendor, matchedContact)}
+                                  aria-label={`Add WhatsApp number for ${item.vendor}`}
+                                  title={`Add WhatsApp number for ${item.vendor}`}
+                                  className="w-9 h-9 rounded-full bg-[#111315] text-white hover:bg-black/80 transition-colors flex items-center justify-center shadow-[0_2px_8px_rgba(17,19,21,0.14)] cursor-pointer"
+                                >
+                                  <WhatsAppIcon className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </li>
                   );
                 })}
-              </ul>
-            )}
+                      </ul>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </section>
 
         </div>
@@ -724,12 +766,8 @@ export function PurchasesView({
                   : 'pt-3.5 pb-8 hover:bg-black/[0.03]'
               }`}
             >
-              <h2
-                className={`font-display font-semibold text-[#111315] transition-all duration-300 ${
-                  installationsExpanded ? 'text-sm' : 'text-base'
-                }`}
-              >
-                {installationsExpanded ? 'Installed tyres by corner' : 'Installation by Tyre'}
+              <h2 className="font-display text-base font-semibold text-[#111315]">
+                Installation by Tyre
               </h2>
               <span className="inline-flex items-center gap-1.5 text-xs text-[#5E646A]">
                 {installationsExpanded && <span>Age &amp; last price</span>}

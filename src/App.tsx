@@ -518,6 +518,7 @@ export default function App() {
       {/* Sticky Bottom Navigation Bar: Home (Left) · Purchases (Middle) · Log (Right) */}
       <BottomNav
         activeTab={activeTab}
+        lightSurface={logExpanded}
         onSelectTab={(tab) => {
           setLogExpanded(false);
           setActiveTab(tab);

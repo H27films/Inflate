@@ -7,6 +7,7 @@ interface BottomNavProps {
   activeTab: ActiveTab;
   onSelectTab: (tab: ActiveTab) => void;
   onOpenLog: () => void;
+  lightSurface?: boolean;
 }
 
 function WheelIcon({
@@ -65,7 +66,12 @@ function WheelIcon({
   );
 }
 
-export function BottomNav({ activeTab, onSelectTab, onOpenLog }: BottomNavProps) {
+export function BottomNav({
+  activeTab,
+  onSelectTab,
+  onOpenLog,
+  lightSurface = false,
+}: BottomNavProps) {
   const isGarage = activeTab === 'garage';
   const isPurchases = activeTab === 'purchases';
 
@@ -77,7 +83,11 @@ export function BottomNav({ activeTab, onSelectTab, onOpenLog }: BottomNavProps)
       {/* Frosted blur layer from bottom edge up to the top line of the bottom nav */}
       <div
         aria-hidden="true"
-        className="absolute inset-0 bg-gradient-to-t from-[#F3F4F2]/95 via-[#F3F4F2]/85 to-[#F3F4F2]/65 backdrop-blur-xl"
+        className={`absolute inset-0 backdrop-blur-xl transition-colors duration-200 ${
+          lightSurface
+            ? 'bg-gradient-to-b from-white/70 via-white/92 to-[#EAECE8]/95'
+            : 'bg-gradient-to-t from-[#F3F4F2]/95 via-[#F3F4F2]/85 to-[#F3F4F2]/65'
+        }`}
       />
 
       <nav className="relative z-10 pointer-events-auto inline-flex items-center gap-1.5 p-1.5 rounded-full bg-[#E5E7E3]/92 backdrop-blur-md border border-black/8 shadow-[0_8px_24px_rgba(17,19,21,0.10)]">

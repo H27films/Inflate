@@ -45,6 +45,11 @@ export interface PurchaseLogEntry {
   notes?: string;
 }
 
+export interface CarRenewals {
+  insurance: string; // YYYY-MM-DD
+  cartax: string; // YYYY-MM-DD
+}
+
 export interface CarProfile {
   id: CarId;
   displayTitle: string;
@@ -61,6 +66,7 @@ export interface CarProfile {
     front: string;
     rear: string;
   };
+  renewals?: CarRenewals;
   pressureLogs: PressureLogEntry[];
   purchaseLogs: PurchaseLogEntry[];
 }

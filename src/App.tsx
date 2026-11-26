@@ -3,6 +3,7 @@ import { ArrowLeftRight, Plus } from 'lucide-react';
 import {
   CarId,
   CarProfile,
+  CarRenewals,
   CORNER_LABELS,
   PressureLogEntry,
   PurchaseLogEntry,
@@ -44,8 +45,20 @@ function loadStoredGarage(): Record<CarId, CarProfile> {
     if (!raw) return INITIAL_GARAGE;
     const parsed = JSON.parse(raw) as Partial<Record<CarId, CarProfile>>;
     return {
-      slk250: parsed.slk250 ?? INITIAL_GARAGE.slk250,
-      fortuner: parsed.fortuner ?? INITIAL_GARAGE.fortuner,
+      slk250: parsed.slk250
+        ? {
+            ...INITIAL_GARAGE.slk250,
+            ...parsed.slk250,
+            renewals: parsed.slk250.renewals ?? INITIAL_GARAGE.slk250.renewals,
+          }
+        : INITIAL_GARAGE.slk250,
+      fortuner: parsed.fortuner
+        ? {
+            ...INITIAL_GARAGE.fortuner,
+            ...parsed.fortuner,
+            renewals: parsed.fortuner.renewals ?? INITIAL_GARAGE.fortuner.renewals,
+          }
+        : INITIAL_GARAGE.fortuner,
     };
   } catch {
     return INITIAL_GARAGE;
@@ -178,6 +191,26 @@ export default function App() {
     setContacts((prev) => prev.filter((c) => c.id !== id));
   };
 
+  const handleUpdateRenewal = (field: keyof CarRenewals, date: string) => {
+    setGarage((prev) => ({
+      ...prev,
+      [activeCarId]: {
+        ...prev[activeCarId],
+        renewals: {
+          insurance:
+            prev[activeCarId].renewals?.insurance ??
+            INITIAL_GARAGE[activeCarId].renewals?.insurance ??
+            '2027-01-10',
+          cartax:
+            prev[activeCarId].renewals?.cartax ??
+            INITIAL_GARAGE[activeCarId].renewals?.cartax ??
+            '2027-01-10',
+          [field]: date,
+        },
+      },
+    }));
+  };
+
   return (
     <div
       className={
@@ -281,6 +314,7 @@ export default function App() {
                 car={carWithSortedLogs}
                 selectedCorner={selectedCorner}
                 onSelectCorner={setSelectedCorner}
+                onUpdateRenewal={handleUpdateRenewal}
               />
             </div>
 

@@ -11,6 +11,7 @@ import {
 } from '../types';
 import {
   detectCurrentLocationName,
+  formatCompactMonthDay,
   formatDaysBetween,
   formatDisplayDate,
   formatRelativeDays,
@@ -26,7 +27,7 @@ interface PressureLogSheetProps {
   onDeleteLog: (id: string) => void;
 }
 
-const PREVIEW_LIMIT = 4;
+const PREVIEW_LIMIT = 5;
 
 export function PressureLogSheet({
   car,
@@ -184,7 +185,7 @@ export function PressureLogSheet({
     ? showAllEntries
       ? 'fixed inset-x-0 top-2 bottom-0 z-45 bg-white rounded-t-3xl border-t border-black/8 shadow-[0_-16px_48px_rgba(17,19,21,0.18)] flex flex-col pb-20 lg:inset-x-0 lg:top-12 lg:bottom-4 lg:max-w-2xl lg:mx-auto lg:rounded-3xl lg:border lg:shadow-2xl lg:pb-0'
       : 'fixed inset-x-0 bottom-0 z-35 bg-white rounded-t-3xl border-t border-black/8 shadow-[0_-16px_48px_rgba(17,19,21,0.14)] max-h-[72dvh] flex flex-col pb-20 lg:static lg:z-auto lg:rounded-3xl lg:border lg:shadow-none lg:max-h-[560px] lg:pb-0'
-    : 'relative w-full bg-white rounded-t-3xl rounded-b-none lg:rounded-3xl border-t border-x lg:border border-black/8 shadow-[0_-4px_16px_rgba(17,19,21,0.04)] overflow-hidden shrink-0';
+    : 'relative w-full bg-[#16191D] text-white rounded-t-3xl rounded-b-none lg:rounded-3xl border-t border-x lg:border border-black/15 shadow-[0_-4px_16px_rgba(17,19,21,0.08)] overflow-hidden shrink-0';
 
   return (
     <>
@@ -212,49 +213,67 @@ export function PressureLogSheet({
         aria-label="Tyre pressure log history"
         className={sectionClassName}
       >
-        {/* Compact Clickable Log Summary Bar */}
-        <button
-          type="button"
-          onClick={() => onToggleExpanded(!expanded)}
-          className="w-full text-left px-4 py-2.5 cursor-pointer hover:bg-black/[0.015] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#111315] shrink-0"
-        >
-          <div className="flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5 text-[11px] text-[#5E646A]">
-                <span className="font-medium">Pressure log</span>
-                <span aria-hidden="true">·</span>
-                <span className="font-mono tabular-nums">
-                  {car.pressureLogs.length} {car.pressureLogs.length === 1 ? 'entry' : 'entries'}
-                </span>
-              </div>
-              <div className="flex items-baseline gap-2 mt-0.5 truncate">
-                <span className="font-display font-semibold text-sm text-[#111315]">
-                  {latestLog ? formatDisplayDate(latestLog.date) : 'No entries'}
-                </span>
-                {(latestLog?.station || latestLog?.lowTyre || latestLog?.note) && (
-                  <span className="text-xs text-[#5E646A] truncate">
-                    ·{' '}
-                    {latestLog.station ??
-                      (latestLog.lowTyre
-                        ? `${CORNER_LABELS[latestLog.lowTyre.corner]} was low`
-                        : latestLog.note)}
-                  </span>
-                )}
-              </div>
-            </div>
+        {/* Top Bar: Compact Summary or Clean Expanded Header */}
+        {expanded ? (
+          <div className="w-full px-4 py-3 flex items-center justify-between gap-3 shrink-0">
+            <button
+              type="button"
+              onClick={() => onToggleExpanded(false)}
+              className="flex-1 min-w-0 text-left cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#111315] rounded-lg"
+            >
+              <h2 className="font-display text-base font-semibold text-[#111315]">
+                Pressure Log
+              </h2>
+            </button>
 
-            <div className="flex items-center gap-2.5 shrink-0">
+            <div className="flex items-center gap-2 shrink-0">
               {latestLog && (
-                <span className="text-xs font-medium text-[#5E646A] tabular-nums">
+                <span className="text-xs font-medium text-[#5E646A] tabular-nums mr-0.5">
                   {formatRelativeDays(latestLog.date)}
                 </span>
               )}
-              <span className="w-8 h-8 rounded-full bg-[#F3F4F2] flex items-center justify-center text-[#111315] shrink-0">
-                {expanded ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
-              </span>
+              <button
+                type="button"
+                onClick={handleOpenAdd}
+                aria-label="Add pressure entry"
+                title="Add pressure entry"
+                className="w-8 h-8 rounded-full bg-[#111315] text-white hover:bg-black/85 active:scale-[0.96] transition-all flex items-center justify-center shrink-0 cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => onToggleExpanded(false)}
+                aria-label="Collapse pressure log"
+                title="Collapse pressure log"
+                className="w-8 h-8 rounded-full bg-[#F3F4F2] flex items-center justify-center text-[#111315] hover:bg-black/[0.06] active:scale-[0.96] transition-all shrink-0 cursor-pointer"
+              >
+                <ChevronDown className="w-4 h-4" />
+              </button>
             </div>
           </div>
-        </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => onToggleExpanded(true)}
+            className="w-full text-left px-4 py-2 cursor-pointer hover:bg-white/[0.03] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40 shrink-0"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="font-display text-base font-semibold text-white leading-none truncate">
+                Pressure Log
+              </h2>
+
+              <div className="flex items-center gap-2.5 shrink-0">
+                <span className="text-xs font-medium text-white/70 tabular-nums">
+                  {latestLog ? formatCompactMonthDay(latestLog.date) : 'No entries'}
+                </span>
+                <span className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-white shrink-0">
+                  <ChevronUp className="w-4 h-4" />
+                </span>
+              </div>
+            </div>
+          </button>
+        )}
 
         {/* Expanded History List */}
         <AnimatePresence initial={false}>
@@ -268,31 +287,6 @@ export function PressureLogSheet({
               transition={{ duration: 0.2 }}
               className="border-t border-black/6 flex-1 overflow-y-auto px-4 py-3 space-y-3"
             >
-              <div className="flex items-center justify-between gap-2 pb-1">
-                <div className="flex items-center gap-2">
-                  <h3 className="font-display text-sm font-semibold text-[#111315]">
-                    {showAllEntries ? 'All top-up entries' : 'Recent top-up entries'}
-                  </h3>
-                  {showAllEntries && hasMoreThanLimit && (
-                    <button
-                      type="button"
-                      onClick={() => setShowAllEntries(false)}
-                      className="min-h-[30px] px-2.5 py-1 rounded-full bg-[#F3F4F2] text-[#5E646A] hover:text-[#111315] text-[11px] font-medium flex items-center gap-1 transition-colors cursor-pointer"
-                    >
-                      <Minimize2 className="w-3 h-3" />
-                      <span>Compact</span>
-                    </button>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={handleOpenAdd}
-                  className="min-h-[36px] px-3 py-1.5 rounded-full bg-[#111315] text-white text-xs font-medium flex items-center gap-1.5 hover:bg-black/85 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Add entry</span>
-                </button>
-              </div>
 
               {showAddForm && (
                 <form
@@ -569,17 +563,26 @@ export function PressureLogSheet({
                     })}
                   </ul>
 
-                  {hasMoreThanLimit && !showAllEntries && (
+                  {hasMoreThanLimit && (
                     <button
                       type="button"
-                      onClick={() => setShowAllEntries(true)}
+                      onClick={() => setShowAllEntries((prev) => !prev)}
                       className="w-full min-h-[44px] rounded-2xl bg-[#F3F4F2] border border-black/8 hover:bg-black/[0.05] text-xs font-semibold text-[#111315] flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                     >
-                      <Maximize2 className="w-3.5 h-3.5" />
-                      <span>
-                        See more ({remainingCount}{' '}
-                        {remainingCount === 1 ? 'more entry' : 'more entries'})
-                      </span>
+                      {showAllEntries ? (
+                        <>
+                          <Minimize2 className="w-3.5 h-3.5" />
+                          <span>Show less</span>
+                        </>
+                      ) : (
+                        <>
+                          <Maximize2 className="w-3.5 h-3.5" />
+                          <span>
+                            See more ({remainingCount}{' '}
+                            {remainingCount === 1 ? 'more entry' : 'more entries'})
+                          </span>
+                        </>
+                      )}
                     </button>
                   )}
                 </>

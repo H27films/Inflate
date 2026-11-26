@@ -42,6 +42,10 @@ export const INITIAL_GARAGE: Record<CarId, CarProfile> = {
       front: '225/40 R18 92Y',
       rear: '245/35 R18 92Y',
     },
+    renewals: {
+      insurance: '2027-01-10',
+      cartax: '2027-01-10',
+    },
     pressureLogs: [
       {
         id: 'slk-p-8',
@@ -140,6 +144,10 @@ export const INITIAL_GARAGE: Record<CarId, CarProfile> = {
       front: '265/65 R17',
       rear: '265/65 R17',
     },
+    renewals: {
+      insurance: '2027-01-10',
+      cartax: '2027-01-10',
+    },
     pressureLogs: [
       {
         id: 'fort-p-1',
@@ -185,6 +193,29 @@ export function formatDisplayDate(dateStr: string): string {
     day: 'numeric',
     year: 'numeric',
   });
+}
+
+export function formatRenewalDate(dateStr: string): string {
+  const dt = parseLocalDate(dateStr);
+  const day = dt.getDate();
+  const suffix =
+    day % 10 === 1 && day !== 11
+      ? 'st'
+      : day % 10 === 2 && day !== 12
+        ? 'nd'
+        : day % 10 === 3 && day !== 13
+          ? 'rd'
+          : 'th';
+  const month = dt.toLocaleDateString('en-US', { month: 'short' });
+  const year = dt.getFullYear();
+  return `${day}${suffix} ${month} ${year}`;
+}
+
+export function formatCompactMonthDay(dateStr: string): string {
+  const dt = parseLocalDate(dateStr);
+  const month = dt.toLocaleDateString('en-US', { month: 'short' });
+  const day = dt.getDate();
+  return `${month}-${day}`;
 }
 
 export function getDaysSince(dateStr: string): number {

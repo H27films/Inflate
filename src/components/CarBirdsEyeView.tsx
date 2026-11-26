@@ -1,12 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { CarId, CarProfile, CORNER_LABELS, TyreCorner } from '../types';
-import { getCornerPurchaseInfo } from '../data/initialGarage';
+import { X } from 'lucide-react';
+import { CarId, CarProfile, CarRenewals, CORNER_LABELS, TyreCorner } from '../types';
+import { formatRenewalDate, getCornerPurchaseInfo } from '../data/initialGarage';
 
 interface CarBirdsEyeViewProps {
   car: CarProfile;
   selectedCorner: TyreCorner | null;
   onSelectCorner: (corner: TyreCorner | null) => void;
+  onUpdateRenewal: (field: keyof CarRenewals, date: string) => void;
 }
 
 interface WheelSpot {
@@ -23,16 +25,16 @@ const WHEEL_SPOTS: Record<CarId, WheelSpot[]> = {
     { corner: 'RR', leftPct: 85, topPct: 75 },
   ],
   fortuner: [
-    { corner: 'FL', leftPct: 14.5, topPct: 26 },
-    { corner: 'FR', leftPct: 85.5, topPct: 26 },
-    { corner: 'RL', leftPct: 14.5, topPct: 78 },
-    { corner: 'RR', leftPct: 85.5, topPct: 78 },
+    { corner: 'FL', leftPct: 14.5, topPct: 21 },
+    { corner: 'FR', leftPct: 85.5, topPct: 21 },
+    { corner: 'RL', leftPct: 14.5, topPct: 77 },
+    { corner: 'RR', leftPct: 85.5, topPct: 77 },
   ],
 };
 
 const SOURCE_IMAGES: Record<CarId, string> = {
   slk250: '/assets/aistudio/81d0f7f1d29f41f7ef25816ce8d819db_2dbba125.jpg',
-  fortuner: '/assets/aistudio/692e428c303d103a82a2c30067945734_9eac0568.jpg',
+  fortuner: '/assets/aistudio/fortuner_cutout.png',
 };
 
 function formatPrice(amount: number): string {
@@ -187,21 +189,29 @@ export function CarBirdsEyeView({
   car,
   selectedCorner,
   onSelectCorner,
+  onUpdateRenewal,
 }: CarBirdsEyeViewProps) {
   const [cutoutUrls, setCutoutUrls] = useState<Partial<Record<CarId, string>>>({});
+  const [roofSelected, setRoofSelected] = useState(false);
+  const [editingField, setEditingField] = useState<keyof CarRenewals | null>(null);
+  const [draftDate, setDraftDate] = useState('2027-01-10');
+
+  useEffect(() => {
+    setRoofSelected(false);
+    setEditingField(null);
+  }, [car.id]);
 
   useEffect(() => {
     let active = true;
-    (['slk250', 'fortuner'] as CarId[]).forEach((id) => {
-      if (cutoutUrls[id]) return;
-      processCarAsset(id)
+    if (!cutoutUrls.slk250) {
+      processCarAsset('slk250')
         .then((url) => {
           if (active) {
-            setCutoutUrls((prev) => ({ ...prev, [id]: url }));
+            setCutoutUrls((prev) => ({ ...prev, slk250: url }));
           }
         })
         .catch(() => {});
-    });
+    }
     return () => {
       active = false;
     };
@@ -210,6 +220,21 @@ export function CarBirdsEyeView({
   const spots = WHEEL_SPOTS[car.id];
   const activeSrc = cutoutUrls[car.id] ?? SOURCE_IMAGES[car.id];
   const activeSpot = spots.find((s) => s.corner === selectedCorner) ?? null;
+
+  const insuranceDate = car.renewals?.insurance ?? '2027-01-10';
+  const cartaxDate = car.renewals?.cartax ?? '2027-01-10';
+
+  const openEditRenewal = (field: keyof CarRenewals, currentDate: string) => {
+    setEditingField(field);
+    setDraftDate(currentDate);
+  };
+
+  const handleSaveRenewal = (e: FormEvent) => {
+    e.preventDefault();
+    if (!editingField || !draftDate) return;
+    onUpdateRenewal(editingField, draftDate);
+    setEditingField(null);
+  };
 
   const selectedInfo = selectedCorner
     ? getCornerPurchaseInfo(car.purchaseLogs, selectedCorner)
@@ -270,6 +295,81 @@ export function CarBirdsEyeView({
             );
           })}
 
+          {/* Interactive Center Roof Hotspot for Insurance & Cartax */}
+          <button
+            type="button"
+            onClick={() => setRoofSelected((prev) => !prev)}
+            aria-label="Toggle insurance and cartax renewal dates"
+            aria-pressed={roofSelected}
+            style={{ left: '50%', top: '52%' }}
+            className="absolute -translate-x-1/2 -translate-y-1/2 w-14 h-20 flex items-center justify-center cursor-pointer focus:outline-none group"
+          >
+            <span
+              className={`w-8 h-12 rounded-2xl transition-all duration-150 ${
+                roofSelected
+                  ? 'bg-[#FF5A1F]/22 ring-2 ring-[#FF5A1F] shadow-[0_0_18px_rgba(255,90,31,0.45)] scale-105'
+                  : 'bg-transparent group-hover:ring-1 group-hover:ring-black/20 group-hover:bg-black/5'
+              }`}
+            />
+          </button>
+
+          {/* Left & Right Renewal Pop-Ups when Roof is Selected */}
+          <AnimatePresence>
+            {roofSelected && (
+              <>
+                <motion.div
+                  key={`${car.id}-insurance`}
+                  initial={{ opacity: 0, x: 6 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 4 }}
+                  transition={{ duration: 0.16 }}
+                  style={{
+                    top: '50%',
+                    right: 'calc(85% + 18px)',
+                  }}
+                  className="absolute -translate-y-1/2 text-right space-y-0.5 w-max max-w-[115px] sm:max-w-[165px]"
+                >
+                  <p className="font-display text-[11px] sm:text-xs font-bold text-[#111315] leading-tight">
+                    Insurance
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => openEditRenewal('insurance', insuranceDate)}
+                    aria-label={`Edit insurance renewal date (${formatRenewalDate(insuranceDate)})`}
+                    className="font-sans text-[11px] sm:text-xs font-normal text-[#5E646A] hover:text-[#FF5A1F] active:scale-[0.98] transition-colors whitespace-nowrap leading-tight cursor-pointer underline decoration-black/20 underline-offset-2"
+                  >
+                    {formatRenewalDate(insuranceDate)}
+                  </button>
+                </motion.div>
+
+                <motion.div
+                  key={`${car.id}-cartax`}
+                  initial={{ opacity: 0, x: -6 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -4 }}
+                  transition={{ duration: 0.16 }}
+                  style={{
+                    top: '50%',
+                    left: 'calc(85% + 18px)',
+                  }}
+                  className="absolute -translate-y-1/2 text-left space-y-0.5 w-max max-w-[115px] sm:max-w-[165px]"
+                >
+                  <p className="font-display text-[11px] sm:text-xs font-bold text-[#111315] leading-tight">
+                    Cartax
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => openEditRenewal('cartax', cartaxDate)}
+                    aria-label={`Edit cartax renewal date (${formatRenewalDate(cartaxDate)})`}
+                    className="font-sans text-[11px] sm:text-xs font-normal text-[#5E646A] hover:text-[#FF5A1F] active:scale-[0.98] transition-colors whitespace-nowrap leading-tight cursor-pointer underline decoration-black/20 underline-offset-2"
+                  >
+                    {formatRenewalDate(cartaxDate)}
+                  </button>
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>
+
           {/* Borderless Text Pop-Up Next to Selected Wheel: Model, Sizing, Last $ Price */}
           <AnimatePresence>
             {activeSpot && (
@@ -325,6 +425,74 @@ export function CarBirdsEyeView({
             )}
           </AnimatePresence>
         </motion.div>
+      </AnimatePresence>
+
+      {/* Renewal Date Edit Modal */}
+      <AnimatePresence>
+        {editingField && (
+          <motion.div
+            key="renewal-modal"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setEditingField(null)}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/35 backdrop-blur-[2px]"
+          >
+            <motion.form
+              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ duration: 0.16 }}
+              onClick={(e) => e.stopPropagation()}
+              onSubmit={handleSaveRenewal}
+              className="w-full max-w-xs bg-white rounded-3xl border border-black/8 shadow-[0_20px_50px_rgba(17,19,21,0.2)] p-5 space-y-4 text-left"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <h3 className="font-display text-base font-semibold text-[#111315]">
+                    {editingField === 'insurance' ? 'Insurance' : 'Cartax'} Renewal
+                  </h3>
+                  <p className="text-xs text-[#5E646A] mt-0.5">{car.displayTitle}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditingField(null)}
+                  aria-label="Close renewal editor"
+                  className="w-8 h-8 rounded-full bg-[#F3F4F2] flex items-center justify-center text-[#5E646A] hover:text-[#111315] cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <label className="block">
+                <span className="text-[11px] font-medium text-[#5E646A]">Renewal date</span>
+                <input
+                  type="date"
+                  required
+                  value={draftDate}
+                  onChange={(e) => setDraftDate(e.target.value)}
+                  className="mt-1.5 w-full h-11 px-3 rounded-xl bg-[#F3F4F2] border border-black/10 text-sm font-mono text-[#111315]"
+                />
+              </label>
+
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setEditingField(null)}
+                  className="flex-1 h-10 rounded-xl bg-[#F3F4F2] text-xs font-semibold text-[#111315] hover:bg-black/[0.06] transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 h-10 rounded-xl bg-[#111315] text-xs font-semibold text-white hover:bg-black/85 transition-colors cursor-pointer"
+                >
+                  Save
+                </button>
+              </div>
+            </motion.form>
+          </motion.div>
+        )}
       </AnimatePresence>
     </div>
   );

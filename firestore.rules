@@ -1,0 +1,297 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isSignedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(ownerId) {
+      return isSignedIn() && request.auth.uid == ownerId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 3 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isDateString(val) {
+      return val is string && val.size() == 10 && val.matches('^\\d{4}-\\d{2}-\\d{2}$');
+    }
+
+    function isOptionalString(data, field, maxLen) {
+      return !(field in data) || (data[field] is string && data[field].size() <= maxLen);
+    }
+
+    function isValidCarKey(val) {
+      return val is string && (val == 'slk250' || val == 'fortuner');
+    }
+
+    function isValidCorner(val) {
+      return val is string && (val == 'FL' || val == 'FR' || val == 'RL' || val == 'RR');
+    }
+
+    function isValidKpaNumber(val) {
+      return val is number && val >= 1 && val <= 1000;
+    }
+
+    function isValidPressuresMap(m) {
+      return m is map
+        && m.keys().hasAll(['FL', 'FR', 'RL', 'RR'])
+        && m.keys().hasOnly(['FL', 'FR', 'RL', 'RR'])
+        && isValidKpaNumber(m.FL)
+        && isValidKpaNumber(m.FR)
+        && isValidKpaNumber(m.RL)
+        && isValidKpaNumber(m.RR);
+    }
+
+    function isValidOptionalBeforePressures(m) {
+      return m is map
+        && m.keys().size() <= 4
+        && m.keys().hasOnly(['FL', 'FR', 'RL', 'RR'])
+        && (!('FL' in m) || isValidKpaNumber(m.FL))
+        && (!('FR' in m) || isValidKpaNumber(m.FR))
+        && (!('RL' in m) || isValidKpaNumber(m.RL))
+        && (!('RR' in m) || isValidKpaNumber(m.RR));
+    }
+
+    function isValidLowTyre(m) {
+      return m is map
+        && m.keys().hasAll(['corner'])
+        && m.keys().hasOnly(['corner', 'beforeKpa'])
+        && isValidCorner(m.corner)
+        && (!('beforeKpa' in m) || isValidKpaNumber(m.beforeKpa));
+    }
+
+    function isValidDefaultSizes(m) {
+      return m is map
+        && m.keys().hasAll(['front', 'rear'])
+        && m.keys().hasOnly(['front', 'rear'])
+        && m.front is string && m.front.size() >= 1 && m.front.size() <= 60
+        && m.rear is string && m.rear.size() >= 1 && m.rear.size() <= 60;
+    }
+
+    function isValidRenewals(m) {
+      return m is map
+        && m.keys().hasAll(['insurance', 'cartax'])
+        && m.keys().hasOnly(['insurance', 'cartax'])
+        && isDateString(m.insurance)
+        && isDateString(m.cartax);
+    }
+
+    function isValidCornersList(c) {
+      return c is list
+        && c.size() >= 1
+        && c.size() <= 4
+        && c.hasOnly(['FL', 'FR', 'RL', 'RR']);
+    }
+
+    function ownsParentCar(carDocId) {
+      return isValidId(carDocId)
+        && exists(/databases/$(database)/documents/cars/$(carDocId))
+        && get(/databases/$(database)/documents/cars/$(carDocId)).data.ownerId == request.auth.uid;
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidCarDoc(data) {
+      return data.keys().hasAll([
+          'ownerId', 'carKey', 'displayTitle', 'make', 'model', 'trim',
+          'year', 'bodyStyle', 'paintHex', 'accentLabel',
+          'recommendedKpa', 'defaultSizes', 'renewals', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'carKey', 'displayTitle', 'make', 'model', 'trim',
+          'year', 'bodyStyle', 'paintHex', 'accentLabel',
+          'recommendedKpa', 'defaultSizes', 'renewals', 'createdAt', 'updatedAt'
+        ])
+        && data.ownerId == request.auth.uid
+        && isValidCarKey(data.carKey)
+        && data.displayTitle is string && data.displayTitle.size() >= 1 && data.displayTitle.size() <= 80
+        && data.make is string && data.make.size() >= 1 && data.make.size() <= 60
+        && data.model is string && data.model.size() >= 1 && data.model.size() <= 60
+        && data.trim is string && data.trim.size() >= 1 && data.trim.size() <= 60
+        && data.year is number && data.year >= 1950 && data.year <= 2100
+        && (data.bodyStyle == 'roadster' || data.bodyStyle == 'suv')
+        && data.paintHex is string && data.paintHex.size() >= 4 && data.paintHex.size() <= 16
+        && data.accentLabel is string && data.accentLabel.size() >= 1 && data.accentLabel.size() <= 60
+        && isValidPressuresMap(data.recommendedKpa)
+        && isValidDefaultSizes(data.defaultSizes)
+        && isValidRenewals(data.renewals)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidPressureLogDoc(data) {
+      return data.keys().hasAll([
+          'ownerId', 'carId', 'carDocId', 'date', 'pressures', 'source', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'carId', 'carDocId', 'date', 'pressures',
+          'beforePressures', 'source', 'station', 'note', 'lowTyre',
+          'createdAt', 'updatedAt'
+        ])
+        && data.ownerId == request.auth.uid
+        && isValidCarKey(data.carId)
+        && isValidId(data.carDocId)
+        && isDateString(data.date)
+        && isValidPressuresMap(data.pressures)
+        && (data.source == 'manual' || data.source == 'camera')
+        && (!('beforePressures' in data) || isValidOptionalBeforePressures(data.beforePressures))
+        && isOptionalString(data, 'station', 160)
+        && isOptionalString(data, 'note', 500)
+        && (!('lowTyre' in data) || isValidLowTyre(data.lowTyre))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidPurchaseLogDoc(data) {
+      return data.keys().hasAll([
+          'ownerId', 'carId', 'carDocId', 'date', 'vendor', 'brandModel',
+          'tyreSize', 'corners', 'totalCost', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'carId', 'carDocId', 'date', 'vendor', 'brandModel',
+          'tyreSize', 'corners', 'totalCost', 'notes', 'createdAt', 'updatedAt'
+        ])
+        && data.ownerId == request.auth.uid
+        && isValidCarKey(data.carId)
+        && isValidId(data.carDocId)
+        && isDateString(data.date)
+        && data.vendor is string && data.vendor.size() >= 1 && data.vendor.size() <= 160
+        && data.brandModel is string && data.brandModel.size() >= 1 && data.brandModel.size() <= 160
+        && data.tyreSize is string && data.tyreSize.size() >= 1 && data.tyreSize.size() <= 80
+        && isValidCornersList(data.corners)
+        && data.totalCost is number && data.totalCost >= 0 && data.totalCost <= 1000000
+        && isOptionalString(data, 'notes', 500)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidContactDoc(data) {
+      return data.keys().hasAll(['ownerId', 'company', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['ownerId', 'company', 'website', 'phone', 'notes', 'createdAt', 'updatedAt'])
+        && data.ownerId == request.auth.uid
+        && data.company is string && data.company.size() >= 1 && data.company.size() <= 160
+        && isOptionalString(data, 'website', 300)
+        && isOptionalString(data, 'phone', 40)
+        && isOptionalString(data, 'notes', 500)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    // ===============================================================
+    // Collections
+    // ===============================================================
+
+    match /cars/{carDocId} {
+      allow get: if isValidId(carDocId) && isOwner(existing().ownerId);
+      allow list: if isSignedIn() && existing().ownerId == request.auth.uid;
+      allow create: if isSignedIn()
+        && isValidId(carDocId)
+        && isValidCarDoc(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isSignedIn()
+        && isValidId(carDocId)
+        && isOwner(existing().ownerId)
+        && isValidCarDoc(incoming())
+        && incoming().ownerId == existing().ownerId
+        && incoming().carKey == existing().carKey
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'renewals', 'recommendedKpa', 'defaultSizes', 'displayTitle', 'trim', 'updatedAt'
+        ]);
+      allow delete: if isValidId(carDocId) && isOwner(existing().ownerId);
+    }
+
+    match /pressureLogs/{logId} {
+      allow get: if isValidId(logId) && isOwner(existing().ownerId);
+      allow list: if isSignedIn() && existing().ownerId == request.auth.uid;
+      allow create: if isSignedIn()
+        && isValidId(logId)
+        && isValidPressureLogDoc(incoming())
+        && ownsParentCar(incoming().carDocId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isSignedIn()
+        && isValidId(logId)
+        && isOwner(existing().ownerId)
+        && isValidPressureLogDoc(incoming())
+        && incoming().ownerId == existing().ownerId
+        && incoming().carId == existing().carId
+        && incoming().carDocId == existing().carDocId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'date', 'pressures', 'beforePressures', 'source', 'station', 'note', 'lowTyre', 'updatedAt'
+        ]);
+      allow delete: if isValidId(logId) && isOwner(existing().ownerId);
+    }
+
+    match /purchaseLogs/{purchaseId} {
+      allow get: if isValidId(purchaseId) && isOwner(existing().ownerId);
+      allow list: if isSignedIn() && existing().ownerId == request.auth.uid;
+      allow create: if isSignedIn()
+        && isValidId(purchaseId)
+        && isValidPurchaseLogDoc(incoming())
+        && ownsParentCar(incoming().carDocId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isSignedIn()
+        && isValidId(purchaseId)
+        && isOwner(existing().ownerId)
+        && isValidPurchaseLogDoc(incoming())
+        && incoming().ownerId == existing().ownerId
+        && incoming().carId == existing().carId
+        && incoming().carDocId == existing().carDocId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'date', 'vendor', 'brandModel', 'tyreSize', 'corners', 'totalCost', 'notes', 'updatedAt'
+        ]);
+      allow delete: if isValidId(purchaseId) && isOwner(existing().ownerId);
+    }
+
+    match /contacts/{contactId} {
+      allow get: if isValidId(contactId) && isOwner(existing().ownerId);
+      allow list: if isSignedIn() && existing().ownerId == request.auth.uid;
+      allow create: if isSignedIn()
+        && isValidId(contactId)
+        && isValidContactDoc(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isSignedIn()
+        && isValidId(contactId)
+        && isOwner(existing().ownerId)
+        && isValidContactDoc(incoming())
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'company', 'website', 'phone', 'notes', 'updatedAt'
+        ]);
+      allow delete: if isValidId(contactId) && isOwner(existing().ownerId);
+    }
+
+    // Default deny for everything else
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

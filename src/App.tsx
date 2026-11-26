@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeftRight, Plus } from 'lucide-react';
+import { ArrowLeftRight, Loader2, Plus } from 'lucide-react';
+import { onAuthStateChanged, signInWithPopup, type User } from 'firebase/auth';
 import {
   CarId,
   CarProfile,
@@ -16,58 +17,49 @@ import {
   formatTyreAgeMonths,
   getCornerPurchaseInfo,
   getDaysSince,
-  INITIAL_CONTACTS,
   INITIAL_GARAGE,
 } from './data/initialGarage';
+import { auth, googleProvider } from './firebase';
+import {
+  addContactRecord,
+  addPressureLogRecord,
+  addPurchaseLogRecord,
+  deleteContactRecord,
+  deletePressureLogRecord,
+  deletePurchaseLogRecord,
+  ensureUserGarageSeeded,
+  subscribeToUserGarage,
+  updateCarRenewalsRecord,
+  updateContactRecord,
+  updatePressureLogRecord,
+} from './services/garageFirestore';
 import { CarBirdsEyeView } from './components/CarBirdsEyeView';
 import { PressureLogSheet } from './components/PressureLogSheet';
 import { PurchasesView } from './components/PurchasesView';
 import { QuickLogModal } from './components/QuickLogModal';
 import { ActiveTab, BottomNav } from './components/BottomNav';
 
-const STORAGE_KEY = 'inflate_garage_v5';
-const CONTACTS_STORAGE_KEY = 'inflate_contacts_v2';
-
-function loadStoredContacts(): TyreContact[] {
-  try {
-    const raw = window.localStorage.getItem(CONTACTS_STORAGE_KEY);
-    if (!raw) return INITIAL_CONTACTS;
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : INITIAL_CONTACTS;
-  } catch {
-    return INITIAL_CONTACTS;
-  }
-}
-
-function loadStoredGarage(): Record<CarId, CarProfile> {
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return INITIAL_GARAGE;
-    const parsed = JSON.parse(raw) as Partial<Record<CarId, CarProfile>>;
-    return {
-      slk250: parsed.slk250
-        ? {
-            ...INITIAL_GARAGE.slk250,
-            ...parsed.slk250,
-            renewals: parsed.slk250.renewals ?? INITIAL_GARAGE.slk250.renewals,
-          }
-        : INITIAL_GARAGE.slk250,
-      fortuner: parsed.fortuner
-        ? {
-            ...INITIAL_GARAGE.fortuner,
-            ...parsed.fortuner,
-            renewals: parsed.fortuner.renewals ?? INITIAL_GARAGE.fortuner.renewals,
-          }
-        : INITIAL_GARAGE.fortuner,
-    };
-  } catch {
-    return INITIAL_GARAGE;
-  }
-}
-
 export default function App() {
-  const [garage, setGarage] = useState<Record<CarId, CarProfile>>(loadStoredGarage);
-  const [contacts, setContacts] = useState<TyreContact[]>(loadStoredContacts);
+  const [user, setUser] = useState<User | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [signingIn, setSigningIn] = useState(false);
+  const [hydratingData, setHydratingData] = useState(false);
+  const [fatalError, setFatalError] = useState<Error | null>(null);
+
+  const [carsMeta, setCarsMeta] = useState<
+    Partial<Record<CarId, Omit<CarProfile, 'pressureLogs' | 'purchaseLogs'>>>
+  >({});
+  const [pressureLogsByCar, setPressureLogsByCar] = useState<Record<CarId, PressureLogEntry[]>>({
+    slk250: [],
+    fortuner: [],
+  });
+  const [purchaseLogsByCar, setPurchaseLogsByCar] = useState<Record<CarId, PurchaseLogEntry[]>>({
+    slk250: [],
+    fortuner: [],
+  });
+  const [contacts, setContacts] = useState<TyreContact[]>([]);
+
   const [activeCarId, setActiveCarId] = useState<CarId>('slk250');
   const [activeTab, setActiveTab] = useState<ActiveTab>('garage');
   const [selectedCorner, setSelectedCorner] = useState<TyreCorner | null>(null);
@@ -75,21 +67,185 @@ export default function App() {
   const [logModalOpen, setLogModalOpen] = useState(false);
   const [addPurchaseOpen, setAddPurchaseOpen] = useState(false);
 
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(garage));
-    } catch {
-      // Ignore storage quota issues
-    }
-  }, [garage]);
+  if (fatalError) {
+    throw fatalError;
+  }
 
   useEffect(() => {
-    try {
-      window.localStorage.setItem(CONTACTS_STORAGE_KEY, JSON.stringify(contacts));
-    } catch {
-      // Ignore storage quota issues
+    const unsubscribe = onAuthStateChanged(auth, (nextUser) => {
+      setUser(nextUser);
+      setAuthReady(true);
+      setAuthError(null);
+    });
+    return unsubscribe;
+  }, []);
+
+  useEffect(() => {
+    if (!user) {
+      setCarsMeta({});
+      setPressureLogsByCar({ slk250: [], fortuner: [] });
+      setPurchaseLogsByCar({ slk250: [], fortuner: [] });
+      setContacts([]);
+      setHydratingData(false);
+      return;
     }
-  }, [contacts]);
+
+    let cancelled = false;
+    let unsubscribeData: (() => void) | undefined;
+    setHydratingData(true);
+
+    ensureUserGarageSeeded(user.uid)
+      .then(() => {
+        if (cancelled) return;
+        let carsLoaded = false;
+        let pressureLoaded = false;
+        let purchasesLoaded = false;
+        let contactsLoaded = false;
+
+        const markLoaded = () => {
+          if (carsLoaded && pressureLoaded && purchasesLoaded && contactsLoaded) {
+            setHydratingData(false);
+          }
+        };
+
+        unsubscribeData = subscribeToUserGarage(user.uid, {
+          onCars: (nextCars) => {
+            setCarsMeta(nextCars);
+            carsLoaded = true;
+            markLoaded();
+          },
+          onPressureLogs: (grouped) => {
+            setPressureLogsByCar(grouped);
+            pressureLoaded = true;
+            markLoaded();
+          },
+          onPurchaseLogs: (grouped) => {
+            setPurchaseLogsByCar(grouped);
+            purchasesLoaded = true;
+            markLoaded();
+          },
+          onContacts: (list) => {
+            setContacts(list);
+            contactsLoaded = true;
+            markLoaded();
+          },
+          onError: (err) => {
+            setFatalError(err);
+          },
+        });
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setFatalError(err instanceof Error ? err : new Error(String(err)));
+        }
+      });
+
+    return () => {
+      cancelled = true;
+      if (unsubscribeData) unsubscribeData();
+    };
+  }, [user]);
+
+  const garage = useMemo<Record<CarId, CarProfile>>(() => {
+    const buildCar = (carId: CarId): CarProfile => {
+      const fallback = INITIAL_GARAGE[carId];
+      const meta = carsMeta[carId];
+      return {
+        ...(meta ?? {
+          id: fallback.id,
+          displayTitle: fallback.displayTitle,
+          make: fallback.make,
+          model: fallback.model,
+          trim: fallback.trim,
+          year: fallback.year,
+          bodyStyle: fallback.bodyStyle,
+          paintHex: fallback.paintHex,
+          accentLabel: fallback.accentLabel,
+          recommendedKpa: fallback.recommendedKpa,
+          defaultSizes: fallback.defaultSizes,
+          renewals: fallback.renewals,
+        }),
+        pressureLogs: pressureLogsByCar[carId],
+        purchaseLogs: purchaseLogsByCar[carId],
+      };
+    };
+
+    return {
+      slk250: buildCar('slk250'),
+      fortuner: buildCar('fortuner'),
+    };
+  }, [carsMeta, pressureLogsByCar, purchaseLogsByCar]);
+
+  const handleGoogleSignIn = async () => {
+    if (signingIn) return;
+    setAuthError(null);
+    setSigningIn(true);
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Unable to sign in with Google.';
+      setAuthError(message);
+    } finally {
+      setSigningIn(false);
+    }
+  };
+
+  if (!authReady || (user && hydratingData)) {
+    return (
+      <div className="min-h-dvh bg-[#F3F4F2] text-[#111315] flex flex-col items-center justify-center gap-3 p-6">
+        <span className="font-brand text-sm tracking-[0.42em] pl-[0.42em] uppercase text-[#111315]">
+          INFLATE
+        </span>
+        <Loader2 className="w-5 h-5 animate-spin text-[#5E646A]" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-dvh bg-[#F3F4F2] text-[#111315] flex flex-col items-center justify-center p-6">
+        <div className="w-full max-w-sm bg-white rounded-3xl border border-black/8 shadow-[0_10px_32px_rgba(17,19,21,0.06)] p-6 space-y-5 text-center">
+          <div className="space-y-1.5">
+            <p className="font-brand text-sm tracking-[0.42em] pl-[0.42em] uppercase text-[#111315]">
+              INFLATE
+            </p>
+            <h1 className="font-display text-xl font-semibold tracking-tight text-[#111315]">
+              Sign in to sync your garage
+            </h1>
+            <p className="text-xs text-[#5E646A] leading-relaxed">
+              Keep your tyre pressure logs, purchase history, renewals, and contacts saved across devices.
+            </p>
+          </div>
+
+          {authError && (
+            <p className="text-xs text-[#D9480F] bg-[#FFF4EE] border border-[#FF5A1F]/20 rounded-xl px-3 py-2 text-left">
+              {authError}
+            </p>
+          )}
+
+          <button
+            type="button"
+            onClick={handleGoogleSignIn}
+            disabled={signingIn}
+            className="w-full h-12 rounded-2xl bg-[#111315] text-white text-sm font-semibold hover:bg-black/85 disabled:opacity-60 transition-colors flex items-center justify-center gap-2.5 cursor-pointer"
+          >
+            {signingIn ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <svg viewBox="0 0 24 24" className="w-4 h-4" aria-hidden="true">
+                <path
+                  fill="#ffffff"
+                  d="M21.35 11.1h-9.17v2.73h6.51c-.33 3.81-3.5 5.44-6.5 5.44C8.36 19.27 5 16.25 5 12c0-4.1 3.2-7.27 7.2-7.27c3.09 0 4.9 1.97 4.9 1.97L19 4.72S16.56 2 12.1 2C6.42 2 2.03 6.8 2.03 12c0 5.05 4.13 10 10.22 10c5.35 0 9.25-3.67 9.25-9.09c0-1.15-.15-1.81-.15-1.81Z"
+                />
+              </svg>
+            )}
+            <span>{signingIn ? 'Signing in...' : 'Continue with Google'}</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const activeCar = garage[activeCarId];
   const otherCarId: CarId = activeCarId === 'slk250' ? 'fortuner' : 'slk250';
@@ -100,115 +256,67 @@ export default function App() {
     setSelectedCorner(null);
   };
 
-  const sortedPressureLogs = useMemo(
-    () => [...activeCar.pressureLogs].sort((a, b) => b.date.localeCompare(a.date)),
-    [activeCar.pressureLogs]
+  const sortedPressureLogs = [...activeCar.pressureLogs].sort((a, b) =>
+    b.date.localeCompare(a.date)
   );
 
-  const carWithSortedLogs = useMemo<CarProfile>(
-    () => ({ ...activeCar, pressureLogs: sortedPressureLogs }),
-    [activeCar, sortedPressureLogs]
-  );
+  const carWithSortedLogs: CarProfile = {
+    ...activeCar,
+    pressureLogs: sortedPressureLogs,
+  };
 
   const latestPressure = sortedPressureLogs[0] ?? null;
   const daysSinceLastTopUp = latestPressure ? getDaysSince(latestPressure.date) : null;
 
+  const runFirestoreAction = (promise: Promise<void>) => {
+    promise.catch((err) => {
+      setFatalError(err instanceof Error ? err : new Error(String(err)));
+    });
+  };
+
   const handleAddPressureLog = (entry: Omit<PressureLogEntry, 'id'>) => {
-    const newEntry: PressureLogEntry = {
-      ...entry,
-      id: `p-${Date.now()}`,
-    };
-    setGarage((prev) => ({
-      ...prev,
-      [activeCarId]: {
-        ...prev[activeCarId],
-        pressureLogs: [newEntry, ...prev[activeCarId].pressureLogs].sort((a, b) =>
-          b.date.localeCompare(a.date)
-        ),
-      },
-    }));
+    runFirestoreAction(addPressureLogRecord(user.uid, activeCarId, entry));
   };
 
   const handleEditPressureLog = (id: string, entry: Omit<PressureLogEntry, 'id'>) => {
-    setGarage((prev) => ({
-      ...prev,
-      [activeCarId]: {
-        ...prev[activeCarId],
-        pressureLogs: prev[activeCarId].pressureLogs
-          .map((item) => (item.id === id ? { ...item, ...entry, id } : item))
-          .sort((a, b) => b.date.localeCompare(a.date)),
-      },
-    }));
+    runFirestoreAction(updatePressureLogRecord(id, entry));
   };
 
   const handleDeletePressureLog = (id: string) => {
-    setGarage((prev) => ({
-      ...prev,
-      [activeCarId]: {
-        ...prev[activeCarId],
-        pressureLogs: prev[activeCarId].pressureLogs.filter((item) => item.id !== id),
-      },
-    }));
+    runFirestoreAction(deletePressureLogRecord(id));
   };
 
   const handleAddPurchase = (entry: Omit<PurchaseLogEntry, 'id'>) => {
-    const newEntry: PurchaseLogEntry = {
-      ...entry,
-      id: `buy-${Date.now()}`,
-    };
-    setGarage((prev) => ({
-      ...prev,
-      [activeCarId]: {
-        ...prev[activeCarId],
-        purchaseLogs: [newEntry, ...prev[activeCarId].purchaseLogs].sort((a, b) =>
-          b.date.localeCompare(a.date)
-        ),
-      },
-    }));
+    runFirestoreAction(addPurchaseLogRecord(user.uid, activeCarId, entry));
   };
 
   const handleDeletePurchase = (id: string) => {
-    setGarage((prev) => ({
-      ...prev,
-      [activeCarId]: {
-        ...prev[activeCarId],
-        purchaseLogs: prev[activeCarId].purchaseLogs.filter((item) => item.id !== id),
-      },
-    }));
+    runFirestoreAction(deletePurchaseLogRecord(id));
   };
 
   const handleAddContact = (entry: Omit<TyreContact, 'id'>) => {
-    setContacts((prev) => [{ ...entry, id: `contact-${Date.now()}` }, ...prev]);
+    runFirestoreAction(addContactRecord(user.uid, entry));
   };
 
   const handleUpdateContact = (id: string, entry: Omit<TyreContact, 'id'>) => {
-    setContacts((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, ...entry } : c))
-    );
+    runFirestoreAction(updateContactRecord(id, entry));
   };
 
   const handleDeleteContact = (id: string) => {
-    setContacts((prev) => prev.filter((c) => c.id !== id));
+    runFirestoreAction(deleteContactRecord(id));
   };
 
   const handleUpdateRenewal = (field: keyof CarRenewals, date: string) => {
-    setGarage((prev) => ({
-      ...prev,
-      [activeCarId]: {
-        ...prev[activeCarId],
-        renewals: {
-          insurance:
-            prev[activeCarId].renewals?.insurance ??
-            INITIAL_GARAGE[activeCarId].renewals?.insurance ??
-            '2027-01-10',
-          cartax:
-            prev[activeCarId].renewals?.cartax ??
-            INITIAL_GARAGE[activeCarId].renewals?.cartax ??
-            '2027-01-10',
-          [field]: date,
-        },
-      },
-    }));
+    const current = activeCar.renewals ??
+      INITIAL_GARAGE[activeCarId].renewals ?? {
+        insurance: '2027-01-10',
+        cartax: '2027-01-10',
+      };
+    const nextRenewals: CarRenewals = {
+      ...current,
+      [field]: date,
+    };
+    runFirestoreAction(updateCarRenewalsRecord(user.uid, activeCarId, nextRenewals));
   };
 
   return (

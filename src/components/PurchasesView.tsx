@@ -834,7 +834,7 @@ export function PurchasesView({
           {/* Collapsible Contacts Bar: Overlaps bottom of Installation by Tyre */}
           <section
             ref={contactsSectionRef}
-            className="relative z-10 -mt-5 bg-[#16191D] text-white rounded-t-3xl rounded-b-none lg:rounded-3xl border-t border-x lg:border border-black/15 shadow-[0_-8px_22px_rgba(17,19,21,0.14)] overflow-hidden"
+            className="relative z-10 -mt-5 bg-[#16191D] text-white rounded-t-3xl rounded-b-none lg:rounded-3xl border-t border-x lg:border border-black/15 shadow-[0_-2px_6px_rgba(17,19,21,0.05)] overflow-hidden"
           >
             <button
               type="button"

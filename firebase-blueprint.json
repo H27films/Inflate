@@ -1,0 +1,321 @@
+{
+  "entities": {
+    "Car": {
+      "title": "Car",
+      "description": "A vehicle profile in the user's garage with target tyre pressures, default tyre sizes, and Insurance/Cartax renewal dates.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the vehicle owner."
+        },
+        "carKey": {
+          "type": "string",
+          "description": "Stable vehicle identifier (slk250 or fortuner).",
+          "enum": ["slk250", "fortuner"]
+        },
+        "displayTitle": {
+          "type": "string",
+          "description": "Display title shown in the UI."
+        },
+        "make": {
+          "type": "string",
+          "description": "Vehicle manufacturer."
+        },
+        "model": {
+          "type": "string",
+          "description": "Vehicle model."
+        },
+        "trim": {
+          "type": "string",
+          "description": "Vehicle registration plate or trim identifier."
+        },
+        "year": {
+          "type": "number",
+          "description": "Model year."
+        },
+        "bodyStyle": {
+          "type": "string",
+          "description": "Body silhouette type.",
+          "enum": ["roadster", "suv"]
+        },
+        "paintHex": {
+          "type": "string",
+          "description": "Paint color hex code."
+        },
+        "accentLabel": {
+          "type": "string",
+          "description": "Paint color label."
+        },
+        "recommendedKpa": {
+          "type": "object",
+          "description": "Recommended cold tyre pressures in kPa for FL, FR, RL, RR.",
+          "properties": {
+            "FL": { "type": "number" },
+            "FR": { "type": "number" },
+            "RL": { "type": "number" },
+            "RR": { "type": "number" }
+          },
+          "required": ["FL", "FR", "RL", "RR"]
+        },
+        "defaultSizes": {
+          "type": "object",
+          "description": "Front and rear tyre size specifications.",
+          "properties": {
+            "front": { "type": "string" },
+            "rear": { "type": "string" }
+          },
+          "required": ["front", "rear"]
+        },
+        "renewals": {
+          "type": "object",
+          "description": "Insurance and Cartax renewal due dates (YYYY-MM-DD).",
+          "properties": {
+            "insurance": { "type": "string", "format": "date" },
+            "cartax": { "type": "string", "format": "date" }
+          },
+          "required": ["insurance", "cartax"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "ownerId",
+        "carKey",
+        "displayTitle",
+        "make",
+        "model",
+        "trim",
+        "year",
+        "bodyStyle",
+        "paintHex",
+        "accentLabel",
+        "recommendedKpa",
+        "defaultSizes",
+        "renewals",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "PressureLog": {
+      "title": "PressureLog",
+      "description": "A tyre pressure top-up or inspection log entry for a vehicle.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the log owner."
+        },
+        "carId": {
+          "type": "string",
+          "enum": ["slk250", "fortuner"]
+        },
+        "carDocId": {
+          "type": "string",
+          "description": "Document ID of the parent car document in /cars."
+        },
+        "date": {
+          "type": "string",
+          "format": "date",
+          "description": "Entry date in YYYY-MM-DD format."
+        },
+        "pressures": {
+          "type": "object",
+          "description": "Target post-top-up tyre pressures in kPa.",
+          "properties": {
+            "FL": { "type": "number" },
+            "FR": { "type": "number" },
+            "RL": { "type": "number" },
+            "RR": { "type": "number" }
+          },
+          "required": ["FL", "FR", "RL", "RR"]
+        },
+        "beforePressures": {
+          "type": "object",
+          "description": "Optional readings measured before topping up (kPa).",
+          "properties": {
+            "FL": { "type": "number" },
+            "FR": { "type": "number" },
+            "RL": { "type": "number" },
+            "RR": { "type": "number" }
+          }
+        },
+        "source": {
+          "type": "string",
+          "enum": ["manual", "camera"]
+        },
+        "station": {
+          "type": "string",
+          "description": "Air pump station or location name."
+        },
+        "note": {
+          "type": "string",
+          "description": "Optional note about the check or top-up."
+        },
+        "lowTyre": {
+          "type": "object",
+          "description": "Optional flagged low corner before top-up.",
+          "properties": {
+            "corner": {
+              "type": "string",
+              "enum": ["FL", "FR", "RL", "RR"]
+            },
+            "beforeKpa": { "type": "number" }
+          },
+          "required": ["corner"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "ownerId",
+        "carId",
+        "carDocId",
+        "date",
+        "pressures",
+        "source",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "PurchaseLog": {
+      "title": "PurchaseLog",
+      "description": "A tyre purchase and installation record for specific wheel corners.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the record owner."
+        },
+        "carId": {
+          "type": "string",
+          "enum": ["slk250", "fortuner"]
+        },
+        "carDocId": {
+          "type": "string",
+          "description": "Document ID of the parent car document in /cars."
+        },
+        "date": {
+          "type": "string",
+          "format": "date",
+          "description": "Purchase/fitment date in YYYY-MM-DD format."
+        },
+        "vendor": {
+          "type": "string",
+          "description": "Tyre shop or workshop name."
+        },
+        "brandModel": {
+          "type": "string",
+          "description": "Tyre brand and model."
+        },
+        "tyreSize": {
+          "type": "string",
+          "description": "Fitted tyre size specification."
+        },
+        "corners": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["FL", "FR", "RL", "RR"]
+          },
+          "description": "Fitted wheel corners."
+        },
+        "totalCost": {
+          "type": "number",
+          "description": "Total purchase cost in RM."
+        },
+        "notes": {
+          "type": "string",
+          "description": "Optional invoice or alignment notes."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "ownerId",
+        "carId",
+        "carDocId",
+        "date",
+        "vendor",
+        "brandModel",
+        "tyreSize",
+        "corners",
+        "totalCost",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "TyreContact": {
+      "title": "TyreContact",
+      "description": "A saved tyre shop or service contact.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the contact owner."
+        },
+        "company": {
+          "type": "string",
+          "description": "Business or shop name."
+        },
+        "website": {
+          "type": "string",
+          "description": "Optional website or Google Maps link."
+        },
+        "phone": {
+          "type": "string",
+          "description": "Optional phone or WhatsApp number."
+        },
+        "notes": {
+          "type": "string",
+          "description": "Optional address or service notes."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["ownerId", "company", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/cars/{carDocId}": {
+      "schema": { "$ref": "#/entities/Car" },
+      "description": "Vehicle profiles owned by the authenticated user."
+    },
+    "/pressureLogs/{logId}": {
+      "schema": { "$ref": "#/entities/PressureLog" },
+      "description": "Tyre pressure log entries owned by the authenticated user."
+    },
+    "/purchaseLogs/{purchaseId}": {
+      "schema": { "$ref": "#/entities/PurchaseLog" },
+      "description": "Tyre purchase history table owned by the authenticated user."
+    },
+    "/contacts/{contactId}": {
+      "schema": { "$ref": "#/entities/TyreContact" },
+      "description": "Tyre shop contacts table owned by the authenticated user."
+    }
+  }
+}

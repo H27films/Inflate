@@ -11,6 +11,7 @@ import {
   TyreAxle,
   TyreContact,
   TyreCorner,
+  TyrePositionAxle,
   WheelImageKey,
 } from '../types';
 import {
@@ -393,7 +394,7 @@ export function PurchasesView({
   const [purchaseLogExpanded, setPurchaseLogExpanded] = useState(false);
   const [installationsExpanded, setInstallationsExpanded] = useState(false);
   const [contactsExpanded, setContactsExpanded] = useState(false);
-  const [focusedAxle, setFocusedAxle] = useState<TyreAxle | null>(null);
+  const [focusedAxle, setFocusedAxle] = useState<TyrePositionAxle | null>(null);
   const [focusedSide, setFocusedSide] = useState<TyreSide>('Left');
 
   const allCollapsed =
@@ -437,7 +438,7 @@ export function PurchasesView({
   const pendingContactScrollRef = useRef<string | null>(null);
   const contactsSectionRef = useRef<HTMLElement | null>(null);
   const installationsSectionRef = useRef<HTMLElement | null>(null);
-  const pendingPresetAxleRef = useRef<TyreAxle | TyreCorner | null>(null);
+  const pendingPresetAxleRef = useRef<TyrePositionAxle | TyreCorner | null>(null);
 
   // Add (+) modal state: 'choose' -> 'purchase' | 'tyre'
   const [addMode, setAddMode] = useState<'choose' | 'purchase' | 'tyre'>('choose');
@@ -454,7 +455,7 @@ export function PurchasesView({
   // Add-to-carousel tyre form state
   const [carouselBrandModel, setCarouselBrandModel] = useState('');
   const [carouselPrice, setCarouselPrice] = useState('');
-  const [carouselAxle, setCarouselAxle] = useState<TyreAxle>('Front');
+  const [carouselAxle, setCarouselAxle] = useState<TyreAxle>('Front & Back');
   const [carouselTyreSize, setCarouselTyreSize] = useState(car.defaultSizes.front);
   const [carouselWheelKey, setCarouselWheelKey] = useState<WheelImageKey>(
     car.bodyStyle === 'suv' ? 'all-terrain' : 'sport-5spoke'
@@ -492,7 +493,7 @@ export function PurchasesView({
       pendingPresetAxleRef.current = null;
       const presetIsRear =
         presetTarget === 'Back' || presetTarget === 'RL' || presetTarget === 'RR';
-      const presetAxle: TyreAxle | null = presetTarget
+      const presetAxle: TyrePositionAxle | null = presetTarget
         ? presetIsRear
           ? 'Back'
           : 'Front'
@@ -522,7 +523,7 @@ export function PurchasesView({
 
       setCarouselBrandModel('');
       setCarouselPrice('');
-      setCarouselAxle(presetAxle ?? 'Front');
+      setCarouselAxle(presetAxle ?? 'Front & Back');
       setCarouselTyreSize(
         presetAxle === 'Back' ? car.defaultSizes.rear : car.defaultSizes.front
       );
@@ -752,7 +753,7 @@ export function PurchasesView({
     ? findMatchingContact(focusedPurchase.vendor, contacts)
     : undefined;
 
-  const handleToggleAxleFocus = (axle: TyreAxle) => {
+  const handleToggleAxleFocus = (axle: TyrePositionAxle) => {
     if (focusedAxle === axle) {
       setFocusedAxle(null);
       return;
@@ -764,7 +765,7 @@ export function PurchasesView({
     setFocusedAxle(axle);
   };
 
-  const handleAddPurchaseForAxle = (target: TyreAxle | TyreCorner) => {
+  const handleAddPurchaseForAxle = (target: TyrePositionAxle | TyreCorner) => {
     pendingPresetAxleRef.current = target;
     setFocusedAxle(null);
     onOpenAddModal?.();
@@ -834,7 +835,7 @@ export function PurchasesView({
   const handleCarouselAxleChange = (nextAxle: TyreAxle) => {
     setCarouselAxle(nextAxle);
     setCarouselTyreSize(
-      nextAxle === 'Front' ? car.defaultSizes.front : car.defaultSizes.rear
+      nextAxle === 'Back' ? car.defaultSizes.rear : car.defaultSizes.front
     );
   };
 
@@ -873,7 +874,7 @@ export function PurchasesView({
       axle: carouselAxle,
       tyreSize:
         carouselTyreSize.trim() ||
-        (carouselAxle === 'Front' ? car.defaultSizes.front : car.defaultSizes.rear),
+        (carouselAxle === 'Back' ? car.defaultSizes.rear : car.defaultSizes.front),
       wheelImageKey: carouselWheelKey,
       ...(carouselImageFileName ? { imageFileName: carouselImageFileName } : {}),
       ...(carouselImageUrl ? { imageUrl: carouselImageUrl } : {}),
@@ -971,9 +972,9 @@ export function PurchasesView({
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.22 }}
-        className="flex-1 w-full max-w-5xl mx-auto flex flex-col justify-between pt-3 pb-0"
+        className="flex-1 w-full max-w-5xl lg:max-w-[540px] mx-auto flex flex-col justify-between pt-3 pb-0"
       >
-        <div className="px-4 sm:px-6 space-y-3">
+        <div className="px-4 sm:px-6 lg:px-4 space-y-3">
           {/* Top Tyre Sizing Section on normal app background (no outer box) */}
           <section className="space-y-2.5">
             <div className="flex items-baseline justify-between gap-3 px-0.5">
@@ -1431,7 +1432,7 @@ export function PurchasesView({
                   transition={{ duration: 0.3, ease: [0.42, 0, 0.58, 1] }}
                   className="overflow-hidden"
                 >
-                  <div className="px-4 sm:px-5 pb-9 grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+                  <div className="px-4 sm:px-5 pb-9 grid grid-cols-2 gap-2.5">
                     {TYRE_CORNERS.map((corner) => {
                       const info = getCornerPurchaseInfo(car.purchaseLogs, corner);
                       const age = info ? formatTyreAge(info.date) : '—';
@@ -1865,20 +1866,20 @@ export function PurchasesView({
                   </div>
                 </div>
 
-                {/* Front / Back Axle Selector */}
+                {/* Front / Back / Front & Back Axle Selector */}
                 <div>
                   <label className="block text-xs font-medium text-[#5E646A] mb-1.5">
                     Axle
                   </label>
-                  <div className="grid grid-cols-2 gap-2 p-1 rounded-xl bg-[#F3F4F2]">
-                    {(['Front', 'Back'] as TyreAxle[]).map((option) => {
+                  <div className="grid grid-cols-3 gap-1.5 p-1 rounded-xl bg-[#F3F4F2]">
+                    {(['Front', 'Back', 'Front & Back'] as TyreAxle[]).map((option) => {
                       const active = carouselAxle === option;
                       return (
                         <button
                           key={option}
                           type="button"
                           onClick={() => handleCarouselAxleChange(option)}
-                          className={`min-h-[40px] rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                          className={`min-h-[40px] px-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
                             active
                               ? 'bg-[#111315] text-white shadow-xs'
                               : 'text-[#5E646A] hover:text-[#111315]'

@@ -42,6 +42,8 @@ import { PressureLogSheet } from './components/PressureLogSheet';
 import { PurchasesView } from './components/PurchasesView';
 import { QuickLogModal } from './components/QuickLogModal';
 import { ActiveTab, BottomNav } from './components/BottomNav';
+import { PWAInstallButton } from './components/PWAInstallButton';
+import { OfflineIndicator } from './components/OfflineIndicator';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -240,7 +242,11 @@ export default function App() {
 
   if (!user) {
     return (
-      <div className="min-h-dvh bg-[#F3F4F2] text-[#111315] flex flex-col items-center justify-center p-6">
+      <div className="min-h-dvh bg-[#F3F4F2] text-[#111315] flex flex-col items-center justify-center p-6 relative">
+        <OfflineIndicator />
+        <div className="fixed top-[calc(1rem+env(safe-area-inset-top))] right-4 z-30">
+          <PWAInstallButton />
+        </div>
         <div className="w-full max-w-sm bg-white rounded-3xl border border-black/8 shadow-[0_10px_32px_rgba(17,19,21,0.06)] p-6 space-y-5 text-center">
           <div className="space-y-1.5">
             <p className="font-brand text-sm tracking-[0.42em] pl-[0.42em] uppercase text-[#111315]">
@@ -375,11 +381,12 @@ export default function App() {
           : 'min-h-dvh bg-[#F3F4F2] text-[#111315] flex flex-col'
       }
     >
-      {/* Top Bar: Left Add Purchase (on Purchases) · Centered clickable INFLATE · Top-Right Switch Cars */}
+      <OfflineIndicator />
+      {/* Top Bar: Left Add Purchase (on Purchases) or PWA Install (on Home) · Centered INFLATE · Top-Right Switch Cars */}
       <header className="shrink-0 z-20 bg-[#F3F4F2] border-b border-black/6 pt-[calc(0.75rem+env(safe-area-inset-top))]">
-        <div className="max-w-5xl mx-auto px-4 h-13 pb-0.5 relative flex items-center justify-center">
+        <div className="max-w-5xl lg:max-w-[540px] mx-auto px-4 h-13 pb-0.5 relative flex items-center justify-center">
 
-          {activeTab === 'purchases' && (
+          {activeTab === 'purchases' ? (
             <button
               type="button"
               onClick={() => setAddPurchaseOpen(true)}
@@ -389,6 +396,10 @@ export default function App() {
             >
               <Plus className="w-3.5 h-3.5 text-white" />
             </button>
+          ) : (
+            <div className="absolute left-3.5">
+              <PWAInstallButton />
+            </div>
           )}
 
           <button
@@ -450,9 +461,9 @@ export default function App() {
             aria-hidden="true"
             className="pointer-events-none fixed inset-x-0 bottom-0 h-44 z-0 bg-gradient-to-b from-transparent via-[#E8EAE6]/75 to-[#D6DAD3]"
           />
-          <main className="relative z-10 flex-1 min-h-0 max-w-5xl w-full mx-auto pt-2.5 pb-[calc(4.7rem+env(safe-area-inset-bottom))] flex flex-col justify-between gap-2 lg:px-6 lg:grid lg:grid-cols-12 lg:gap-5 lg:py-4 lg:pb-24">
-          {/* Top / Left Section: Vehicle Title + Last Top-Up + Bird's-Eye Image + FL/FR/RL/RR Boxes */}
-          <section className="flex-1 min-h-0 px-4 lg:px-0 flex flex-col gap-2 lg:col-span-7">
+          <main className="relative z-10 flex-1 min-h-0 max-w-5xl lg:max-w-[540px] w-full mx-auto pt-2.5 pb-[calc(4.7rem+env(safe-area-inset-bottom))] flex flex-col justify-between lg:justify-center gap-2 lg:gap-4">
+          {/* Top Section: Vehicle Title + Last Top-Up + Bird's-Eye Image + FL/FR/RL/RR Boxes */}
+          <section className="flex-1 lg:flex-initial min-h-0 px-4 flex flex-col gap-2 lg:gap-3">
             <div className="shrink-0 px-0.5 space-y-0.5">
               <div className="flex items-baseline justify-between gap-2">
                 <h1 className="font-display text-xl sm:text-2xl font-medium tracking-tight text-[#111315] leading-tight">
@@ -484,7 +495,7 @@ export default function App() {
             </div>
 
             {/* Bird's-Eye Car Image without box */}
-            <div className="flex-1 min-h-[160px] max-h-[255px] lg:max-h-[360px] relative">
+            <div className="flex-1 lg:flex-none min-h-[160px] max-h-[255px] lg:h-[clamp(180px,31dvh,310px)] lg:max-h-[310px] relative">
               <CarBirdsEyeView
                 car={carWithSortedLogs}
                 selectedCorner={selectedCorner}
@@ -559,7 +570,7 @@ export default function App() {
           </section>
 
           {/* Floating Rounded Pressure Log Card */}
-          <div className="shrink-0 w-full px-4 lg:px-0 lg:col-span-5 lg:self-start">
+          <div className="shrink-0 w-full px-4">
             <PressureLogSheet
               car={carWithSortedLogs}
               expanded={logExpanded}

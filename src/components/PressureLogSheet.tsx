@@ -183,8 +183,8 @@ export function PressureLogSheet({
   const remainingCount = Math.max(0, car.pressureLogs.length - PREVIEW_LIMIT);
 
   const expandedSheetClassName = showAllEntries
-    ? 'fixed inset-x-0 top-2 bottom-0 z-45 bg-white rounded-t-3xl border-t border-black/8 shadow-[0_-16px_48px_rgba(17,19,21,0.18)] flex flex-col pb-28 lg:inset-x-0 lg:top-12 lg:bottom-4 lg:max-w-2xl lg:mx-auto lg:rounded-3xl lg:border lg:shadow-2xl lg:pb-0'
-    : 'fixed inset-x-0 bottom-0 z-35 bg-white rounded-t-3xl border-t border-black/8 shadow-[0_-16px_48px_rgba(17,19,21,0.14)] max-h-[72dvh] flex flex-col pb-28 lg:inset-x-0 lg:bottom-28 lg:max-w-xl lg:mx-auto lg:rounded-3xl lg:border lg:shadow-2xl lg:max-h-[560px] lg:pb-0';
+    ? 'fixed inset-x-0 top-2 bottom-0 z-45 bg-white rounded-t-3xl border-t border-black/8 shadow-[0_-16px_48px_rgba(17,19,21,0.18)] flex flex-col pb-28 lg:max-w-[540px] lg:mx-auto lg:border-x'
+    : 'fixed inset-x-0 bottom-0 z-35 bg-white rounded-t-3xl border-t border-black/8 shadow-[0_-16px_48px_rgba(17,19,21,0.14)] max-h-[72dvh] flex flex-col pb-28 lg:max-w-[540px] lg:mx-auto lg:border-x';
 
   return (
     <>

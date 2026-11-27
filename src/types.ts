@@ -57,7 +57,9 @@ export type WheelImageKey =
   | 'turbine-dark'
   | 'all-terrain';
 
-export type TyreAxle = 'Front' | 'Back';
+export type TyrePositionAxle = 'Front' | 'Back';
+
+export type TyreAxle = TyrePositionAxle | 'Front & Back';
 
 export interface SavedTyreOption {
   id: string;

@@ -100,7 +100,7 @@ service cloud.firestore {
     }
 
     function isValidAxle(val) {
-      return val is string && (val == 'Front' || val == 'Back');
+      return val is string && (val == 'Front' || val == 'Back' || val == 'Front & Back');
     }
 
     function isValidWheelImageKey(val) {

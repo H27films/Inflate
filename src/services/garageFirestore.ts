@@ -280,7 +280,9 @@ function sanitizeWheelKey(val: unknown): WheelImageKey {
 }
 
 function sanitizeAxle(val: unknown): TyreAxle {
-  return val === 'Back' ? 'Back' : 'Front';
+  if (val === 'Back') return 'Back';
+  if (val === 'Front & Back') return 'Front & Back';
+  return 'Front';
 }
 
 function resolveCanonicalTyreImageFileName(
@@ -304,13 +306,19 @@ function resolveCanonicalTyreImageFileName(
   return undefined;
 }
 
+function axleOrderRank(axle: TyreAxle): number {
+  if (axle === 'Front') return 0;
+  if (axle === 'Front & Back') return 1;
+  return 2;
+}
+
 export function buildCanonicalTyreImageFileName(
   carId: CarId,
   axle: TyreAxle,
   brandModel: string
 ): string {
   const carKey = carId === 'slk250' ? 'slk350' : 'fortuner';
-  const axleKey = axle.toLowerCase() === 'back' ? 'back' : 'front';
+  const axleKey = axle === 'Back' ? 'back' : axle === 'Front & Back' ? 'both' : 'front';
   const brandSlug = (brandModel.trim().split(/\s+/)[0] || 'tyre')
     .toLowerCase()
     .replace(/[^a-z0-9]/g, '');
@@ -385,30 +393,54 @@ async function seedSavedTyresIfEmpty(uid: string): Promise<void> {
       }
       await batch.commit();
     } else {
-      // Link any existing matching tyre records and seed newly added starter tyres once
+      // Link any existing matching tyre records, migrate Fortuner axles & Toyo Opa34 price, and seed newly added starter tyres once
       const linkBatch = writeBatch(db);
       let hasUpdates = false;
       let hasToyoOpa34 = false;
+      const fortunerAxleMigrationFlag = `inflate_migrated_fortuner_axles_v1_${uid}`;
+      const alreadyMigratedFortunerAxles =
+        typeof window !== 'undefined' &&
+        window.localStorage.getItem(fortunerAxleMigrationFlag) === '1';
+
       existingTyresSnap.forEach((docSnap) => {
         const d = docSnap.data();
         const carId = d.carId as CarId;
         if (carId !== 'slk250' && carId !== 'fortuner') return;
         const axle = sanitizeAxle(d.axle);
         const brandModel = String(d.brandModel ?? '');
-        if (carId === 'fortuner' && brandModel.toLowerCase().includes('opa34')) {
+        const brandLower = brandModel.toLowerCase();
+        const isOpa34 = carId === 'fortuner' && brandLower.includes('opa34');
+        const isFortuneFrontSet = carId === 'fortuner' && brandLower.includes('fortune');
+        if (isOpa34) {
           hasToyoOpa34 = true;
         }
+
+        const docUpdates: Record<string, unknown> = {};
         const canonicalFile = resolveCanonicalTyreImageFileName(carId, axle, brandModel);
-        if (!canonicalFile) return;
-        const currentFile = typeof d.imageFileName === 'string' ? d.imageFileName : undefined;
-        const currentUrl = typeof d.imageUrl === 'string' ? d.imageUrl : undefined;
-        if (currentFile !== canonicalFile || !currentUrl) {
+        if (canonicalFile) {
+          const currentFile = typeof d.imageFileName === 'string' ? d.imageFileName : undefined;
+          const currentUrl = typeof d.imageUrl === 'string' ? d.imageUrl : undefined;
+          if (currentFile !== canonicalFile || !currentUrl) {
+            docUpdates.imageFileName = canonicalFile;
+            docUpdates.imageUrl = currentUrl || `/assets/tyres/${canonicalFile}`;
+          }
+        }
+
+        if (isOpa34 && (Number(d.price) || 0) === 0) {
+          docUpdates.price = 560;
+        }
+
+        if (carId === 'fortuner' && (!alreadyMigratedFortunerAxles || isOpa34)) {
+          const targetAxle: TyreAxle = isFortuneFrontSet ? 'Front' : 'Front & Back';
+          if (axle !== targetAxle) {
+            docUpdates.axle = targetAxle;
+          }
+        }
+
+        if (Object.keys(docUpdates).length > 0) {
           hasUpdates = true;
-          linkBatch.update(docSnap.ref, {
-            imageFileName: canonicalFile,
-            imageUrl: currentUrl || `/assets/tyres/${canonicalFile}`,
-            updatedAt: serverTimestamp(),
-          });
+          docUpdates.updatedAt = serverTimestamp();
+          linkBatch.update(docSnap.ref, docUpdates);
         }
       });
 
@@ -441,6 +473,9 @@ async function seedSavedTyresIfEmpty(uid: string): Promise<void> {
         if (!hasToyoOpa34 && !alreadySeededToyo && toyoStarter && typeof window !== 'undefined') {
           window.localStorage.setItem(toyoSeedFlag, '1');
         }
+      }
+      if (!alreadyMigratedFortunerAxles && typeof window !== 'undefined') {
+        window.localStorage.setItem(fortunerAxleMigrationFlag, '1');
       }
     }
 
@@ -669,7 +704,7 @@ export function subscribeToUserGarage(
       });
       const sortItems = (list: SavedTyreOption[]) =>
         list.sort((a, b) => {
-          const axleDiff = (a.axle === 'Front' ? 0 : 1) - (b.axle === 'Front' ? 0 : 1);
+          const axleDiff = axleOrderRank(a.axle) - axleOrderRank(b.axle);
           if (axleDiff !== 0) return axleDiff;
           return (sortMeta.get(a.id) ?? 0) - (sortMeta.get(b.id) ?? 0) || a.id.localeCompare(b.id);
         });

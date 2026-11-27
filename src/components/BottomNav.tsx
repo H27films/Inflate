@@ -89,7 +89,7 @@ export function BottomNav({
           aria-hidden="true"
           className={`absolute inset-0 backdrop-blur-xl transition-all duration-200 ${
             lightSurface
-              ? 'bg-gradient-to-b from-white/70 via-white/92 to-[#EAECE8]/95'
+              ? 'lg:max-w-[540px] lg:mx-auto bg-gradient-to-b from-white/70 via-white/92 to-[#EAECE8]/95'
               : 'bg-gradient-to-t from-[#F3F4F2]/96 via-[#F3F4F2]/80 to-transparent [mask-image:linear-gradient(to_top,black_65%,transparent_100%)]'
           }`}
         />

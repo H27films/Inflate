@@ -328,8 +328,8 @@
         },
         "axle": {
           "type": "string",
-          "enum": ["Front", "Back"],
-          "description": "Whether the tyre fits the Front or Back axle."
+          "enum": ["Front", "Back", "Front & Back"],
+          "description": "Whether the tyre fits the Front, Back, or Front & Back axles."
         },
         "tyreSize": {
           "type": "string",

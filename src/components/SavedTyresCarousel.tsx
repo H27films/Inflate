@@ -10,6 +10,7 @@ import {
   TyreAxle,
   TyreContact,
   TyreCorner,
+  TyrePositionAxle,
   WheelImageKey,
 } from '../types';
 import { formatDisplayDate, getCarTyreSizingOptions } from '../data/initialGarage';
@@ -138,14 +139,14 @@ export interface FocusedSideOption {
 interface SavedTyresCarouselProps {
   car: CarProfile;
   tyres: SavedTyreOption[];
-  focusedAxle?: TyreAxle | null;
+  focusedAxle?: TyrePositionAxle | null;
   focusedPurchase?: PurchaseLogEntry | null;
   focusedContact?: TyreContact | null;
   focusedSides?: FocusedSideOption[] | null;
   focusedSide?: TyreSide;
   onFocusedSideChange?: (side: TyreSide) => void;
   onNavigateToContact?: (vendor: string, contact?: TyreContact | null) => void;
-  onAddPurchaseForAxle?: (target: TyreAxle | TyreCorner) => void;
+  onAddPurchaseForAxle?: (target: TyrePositionAxle | TyreCorner) => void;
   rulesPending?: boolean;
   onAddTyre: (entry: Omit<SavedTyreOption, 'id'>) => Promise<void> | void;
   onUpdateTyre: (id: string, entry: Omit<SavedTyreOption, 'id'>) => Promise<void> | void;
@@ -173,7 +174,7 @@ export function SavedTyresCarousel({
   const scrollRafRef = useRef<number | null>(null);
   const isProgrammaticScrollRef = useRef(false);
   const programmaticTimerRef = useRef<number | null>(null);
-  const prevFocusedAxleRef = useRef<TyreAxle | null>(focusedAxle);
+  const prevFocusedAxleRef = useRef<TyrePositionAxle | null>(focusedAxle);
   const activeIndexRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -195,7 +196,7 @@ export function SavedTyresCarousel({
   // Form state
   const [brandModel, setBrandModel] = useState('');
   const [price, setPrice] = useState('');
-  const [axle, setAxle] = useState<TyreAxle>('Front');
+  const [axle, setAxle] = useState<TyreAxle>('Front & Back');
   const [tyreSize, setTyreSize] = useState(car.defaultSizes.front);
   const [wheelImageKey, setWheelImageKey] = useState<WheelImageKey>(
     car.bodyStyle === 'suv' ? 'all-terrain' : 'sport-5spoke'
@@ -204,12 +205,15 @@ export function SavedTyresCarousel({
   const [imageUrl, setImageUrl] = useState<string | undefined>(undefined);
   const [notes, setNotes] = useState('');
 
+  const getAxleRank = (val: TyreAxle) =>
+    val === 'Front' ? 0 : val === 'Front & Back' ? 1 : 2;
+
   const sortedTyres = useMemo(() => {
     return tyres
       .map((item, idx) => ({ item, idx }))
       .sort((a, b) => {
-        const rankA = a.item.axle === 'Front' ? 0 : 1;
-        const rankB = b.item.axle === 'Front' ? 0 : 1;
+        const rankA = getAxleRank(a.item.axle);
+        const rankB = getAxleRank(b.item.axle);
         if (rankA !== rankB) return rankA - rankB;
         return a.idx - b.idx;
       })
@@ -244,7 +248,7 @@ export function SavedTyresCarousel({
         );
       };
       const exactAxleMatch = sortedTyres.find(
-        (t) => t.axle === focusedAxle && isBrandMatch(t)
+        (t) => (t.axle === focusedAxle || t.axle === 'Front & Back') && isBrandMatch(t)
       );
       if (exactAxleMatch) return exactAxleMatch;
       const anyAxleMatch = sortedTyres.find(isBrandMatch);
@@ -473,7 +477,7 @@ export function SavedTyresCarousel({
     setEditingTyre(null);
     setBrandModel('');
     setPrice('');
-    setAxle('Front');
+    setAxle('Front & Back');
     setTyreSize(car.defaultSizes.front);
     setWheelImageKey(car.bodyStyle === 'suv' ? 'all-terrain' : 'sport-5spoke');
     setImageFileName(undefined);
@@ -523,9 +527,9 @@ export function SavedTyresCarousel({
 
   const handleAxleChange = (nextAxle: TyreAxle) => {
     const prevDefault =
-      axle === 'Front' ? car.defaultSizes.front : car.defaultSizes.rear;
+      axle === 'Back' ? car.defaultSizes.rear : car.defaultSizes.front;
     const nextDefault =
-      nextAxle === 'Front' ? car.defaultSizes.front : car.defaultSizes.rear;
+      nextAxle === 'Back' ? car.defaultSizes.rear : car.defaultSizes.front;
     setAxle(nextAxle);
     if (!tyreSize.trim() || tyreSize.trim() === prevDefault) {
       setTyreSize(nextDefault);
@@ -541,7 +545,7 @@ export function SavedTyresCarousel({
       brandModel: brandModel.trim(),
       price: Math.max(0, Number(price) || 0),
       axle,
-      tyreSize: tyreSize.trim() || (axle === 'Front' ? car.defaultSizes.front : car.defaultSizes.rear),
+      tyreSize: tyreSize.trim() || (axle === 'Back' ? car.defaultSizes.rear : car.defaultSizes.front),
       wheelImageKey,
       ...(imageFileName ? { imageFileName } : {}),
       ...(imageUrl ? { imageUrl } : {}),
@@ -552,10 +556,10 @@ export function SavedTyresCarousel({
       if (editingTyre) {
         await onUpdateTyre(editingTyre.id, payload);
       } else {
-        const targetIndex =
-          payload.axle === 'Front'
-            ? sortedTyres.filter((item) => item.axle === 'Front').length
-            : sortedTyres.length;
+        const targetRank = getAxleRank(payload.axle);
+        const targetIndex = sortedTyres.filter(
+          (item) => getAxleRank(item.axle) <= targetRank
+        ).length;
         await onAddTyre(payload);
         setTimeout(() => {
           scrollToIndex(targetIndex, 'smooth');
@@ -942,7 +946,7 @@ export function SavedTyresCarousel({
                 </h3>
                 <p className="mt-0.5 flex items-center justify-center gap-1.5 text-xs text-[#5E646A] tabular-nums">
                   <span className="font-semibold text-[#111315]">
-                    {focusedTyre.axle}
+                    {focusedAxle}
                   </span>
                   <span aria-hidden="true" className="text-[#9AA0A6]">
                     ·
@@ -1246,20 +1250,20 @@ export function SavedTyresCarousel({
                 </div>
               </div>
 
-              {/* Front / Back Axle Selector */}
+              {/* Front / Back / Front & Back Axle Selector */}
               <div>
                 <label className="block text-xs font-medium text-[#5E646A] mb-1.5">
                   Axle
                 </label>
-                <div className="grid grid-cols-2 gap-2 p-1 rounded-xl bg-[#F3F4F2]">
-                  {(['Front', 'Back'] as TyreAxle[]).map((option) => {
+                <div className="grid grid-cols-3 gap-1.5 p-1 rounded-xl bg-[#F3F4F2]">
+                  {(['Front', 'Back', 'Front & Back'] as TyreAxle[]).map((option) => {
                     const active = axle === option;
                     return (
                       <button
                         key={option}
                         type="button"
                         onClick={() => handleAxleChange(option)}
-                        className={`min-h-[40px] rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                        className={`min-h-[40px] px-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
                           active
                             ? 'bg-[#111315] text-white shadow-xs'
                             : 'text-[#5E646A] hover:text-[#111315]'

@@ -202,43 +202,23 @@ export function SplashScreen({
           ))}
         </div>
 
-        {/* Expanding precision hairline rule */}
-        <motion.div
-          aria-hidden="true"
-          initial={{ scaleX: prefersReducedMotion ? 1 : 0, opacity: 0 }}
-          animate={{ scaleX: 1, opacity: 1 }}
-          transition={{
-            duration: prefersReducedMotion ? 0.15 : 0.75,
-            delay: prefersReducedMotion ? 0 : 0.85,
-            ease: [0.22, 1, 0.36, 1],
-          }}
-          className="mt-3.5 h-px w-36 bg-black/12 origin-center"
-        />
+        {/* Expanding precision hairline rule (shown only on manual INFLATE intro screen) */}
+        {interactive && (
+          <motion.div
+            aria-hidden="true"
+            initial={{ scaleX: prefersReducedMotion ? 1 : 0, opacity: 0 }}
+            animate={{ scaleX: 1, opacity: 1 }}
+            transition={{
+              duration: prefersReducedMotion ? 0.15 : 0.75,
+              delay: prefersReducedMotion ? 0 : 0.85,
+              ease: [0.22, 1, 0.36, 1],
+            }}
+            className="mt-3.5 h-px w-36 bg-black/12 origin-center"
+          />
+        )}
 
-        {/* Bottom area: quiet tap-to-return cue in interactive mode, or precision sweep bar on boot */}
-        {interactive ? (
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={
-              prefersReducedMotion
-                ? { opacity: 0.7 }
-                : { opacity: [0.42, 0.82, 0.42] }
-            }
-            transition={
-              prefersReducedMotion
-                ? { delay: 0.2, duration: 0.2 }
-                : {
-                    delay: 1.4,
-                    duration: 2.8,
-                    repeat: Infinity,
-                    ease: 'easeInOut',
-                  }
-            }
-            className="mt-8 text-xs font-medium tracking-wide text-[#5E646A]"
-          >
-            Tap anywhere to return
-          </motion.p>
-        ) : (
+        {/* Boot progress sweep bar (non-interactive boot splash only) */}
+        {!interactive && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -262,6 +242,31 @@ export function SplashScreen({
           </motion.div>
         )}
       </div>
+
+      {/* Tap-to-return cue anchored at the bottom in black (interactive mode only) */}
+      {interactive && (
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={
+            prefersReducedMotion
+              ? { opacity: 1 }
+              : { opacity: [0.65, 1, 0.65] }
+          }
+          transition={
+            prefersReducedMotion
+              ? { delay: 0.2, duration: 0.2 }
+              : {
+                  delay: 1.2,
+                  duration: 2.8,
+                  repeat: Infinity,
+                  ease: 'easeInOut',
+                }
+          }
+          className="absolute inset-x-0 bottom-[calc(2.25rem+env(safe-area-inset-bottom))] text-center text-xs font-medium tracking-wide text-[#111315]"
+        >
+          Tap anywhere to return
+        </motion.p>
+      )}
     </motion.div>
   );
 }

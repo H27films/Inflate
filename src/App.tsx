@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeftRight, Loader2, Plus } from 'lucide-react';
+import { ArrowLeftRight, Plus } from 'lucide-react';
 import { AnimatePresence } from 'motion/react';
 import { onAuthStateChanged, signInWithPopup, type User } from 'firebase/auth';
 import {
@@ -46,6 +46,7 @@ import { ActiveTab, BottomNav } from './components/BottomNav';
 import { PWAInstallButton } from './components/PWAInstallButton';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { SplashScreen } from './components/SplashScreen';
+import { SignInScreen } from './components/SignInScreen';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -83,6 +84,8 @@ export default function App() {
   const [addPurchaseOpen, setAddPurchaseOpen] = useState(false);
   const [introComplete, setIntroComplete] = useState(false);
   const [manualSplashOpen, setManualSplashOpen] = useState(false);
+  const [hasShownSignIn, setHasShownSignIn] = useState(false);
+  const [bootSplashFinished, setBootSplashFinished] = useState(false);
 
   useEffect(() => {
     const prefersReduced =
@@ -99,12 +102,22 @@ export default function App() {
   }
 
   useEffect(() => {
+    const fallbackTimer = window.setTimeout(() => {
+      setAuthReady(true);
+    }, 3000);
     const unsubscribe = onAuthStateChanged(auth, (nextUser) => {
+      window.clearTimeout(fallbackTimer);
       setUser(nextUser);
       setAuthReady(true);
       setAuthError(null);
+      if (!nextUser) {
+        setHasShownSignIn(true);
+      }
     });
-    return unsubscribe;
+    return () => {
+      window.clearTimeout(fallbackTimer);
+      unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
@@ -121,55 +134,73 @@ export default function App() {
     }
 
     let cancelled = false;
-    let unsubscribeData: (() => void) | undefined;
     setHydratingData(true);
+
+    let carsLoaded = false;
+    let hasCarDocs = false;
+    let pressureLoaded = false;
+    let purchasesLoaded = false;
+    let contactsLoaded = false;
+    let seedingDone = false;
+
+    const hydrationCapTimer = window.setTimeout(() => {
+      if (!cancelled) {
+        setHydratingData(false);
+      }
+    }, 1800);
+
+    const markLoaded = () => {
+      if (
+        !cancelled &&
+        carsLoaded &&
+        pressureLoaded &&
+        purchasesLoaded &&
+        contactsLoaded &&
+        (hasCarDocs || seedingDone)
+      ) {
+        window.clearTimeout(hydrationCapTimer);
+        setHydratingData(false);
+      }
+    };
+
+    const unsubscribeData = subscribeToUserGarage(user.uid, {
+      onCars: (nextCars) => {
+        setCarsMeta(nextCars);
+        carsLoaded = true;
+        hasCarDocs = Object.keys(nextCars).length > 0;
+        markLoaded();
+      },
+      onPressureLogs: (grouped) => {
+        setPressureLogsByCar(grouped);
+        pressureLoaded = true;
+        markLoaded();
+      },
+      onPurchaseLogs: (grouped) => {
+        setPurchaseLogsByCar(grouped);
+        purchasesLoaded = true;
+        markLoaded();
+      },
+      onContacts: (list) => {
+        setContacts(list);
+        contactsLoaded = true;
+        markLoaded();
+      },
+      onSavedTyres: (grouped, hasDocs) => {
+        setSavedTyresByCar(grouped);
+        setSavedTyresSynced(hasDocs);
+      },
+      onSavedTyresRulesPending: (pending) => {
+        setSavedTyresRulesPending(pending);
+      },
+      onError: (err) => {
+        setFatalError(err);
+      },
+    });
 
     ensureUserGarageSeeded(user.uid)
       .then(() => {
-        if (cancelled) return;
-        let carsLoaded = false;
-        let pressureLoaded = false;
-        let purchasesLoaded = false;
-        let contactsLoaded = false;
-
-        const markLoaded = () => {
-          if (carsLoaded && pressureLoaded && purchasesLoaded && contactsLoaded) {
-            setHydratingData(false);
-          }
-        };
-
-        unsubscribeData = subscribeToUserGarage(user.uid, {
-          onCars: (nextCars) => {
-            setCarsMeta(nextCars);
-            carsLoaded = true;
-            markLoaded();
-          },
-          onPressureLogs: (grouped) => {
-            setPressureLogsByCar(grouped);
-            pressureLoaded = true;
-            markLoaded();
-          },
-          onPurchaseLogs: (grouped) => {
-            setPurchaseLogsByCar(grouped);
-            purchasesLoaded = true;
-            markLoaded();
-          },
-          onContacts: (list) => {
-            setContacts(list);
-            contactsLoaded = true;
-            markLoaded();
-          },
-          onSavedTyres: (grouped, hasDocs) => {
-            setSavedTyresByCar(grouped);
-            setSavedTyresSynced(hasDocs);
-          },
-          onSavedTyresRulesPending: (pending) => {
-            setSavedTyresRulesPending(pending);
-          },
-          onError: (err) => {
-            setFatalError(err);
-          },
-        });
+        seedingDone = true;
+        markLoaded();
       })
       .catch((err) => {
         if (!cancelled) {
@@ -179,9 +210,10 @@ export default function App() {
 
     return () => {
       cancelled = true;
-      if (unsubscribeData) unsubscribeData();
+      window.clearTimeout(hydrationCapTimer);
+      unsubscribeData();
     };
-  }, [user]);
+  }, [user?.uid]);
 
   const garage = useMemo<Record<CarId, CarProfile>>(() => {
     const buildCar = (carId: CarId): CarProfile => {
@@ -243,66 +275,33 @@ export default function App() {
     }
   };
 
-  const isHydrating = !authReady || (Boolean(user) && hydratingData);
-  const showSplash = !introComplete || isHydrating || manualSplashOpen;
+  const isBootHydrating =
+    !bootSplashFinished &&
+    (!authReady || (Boolean(user) && hydratingData && !hasShownSignIn));
+  const isInteractiveSyncing = Boolean(user) && hydratingData && hasShownSignIn;
+  const showSplash =
+    (!bootSplashFinished && (!introComplete || isBootHydrating)) ||
+    manualSplashOpen;
+
+  useEffect(() => {
+    if (!bootSplashFinished && introComplete && !isBootHydrating) {
+      setBootSplashFinished(true);
+    }
+  }, [bootSplashFinished, introComplete, isBootHydrating]);
 
   const renderContent = () => {
-    if (isHydrating) {
+    if (isBootHydrating) {
       return <div className="min-h-dvh bg-[#F3F4F2] text-[#111315]" />;
     }
 
-    if (!user) {
+    if (!user || isInteractiveSyncing) {
       return (
-        <div className="min-h-dvh bg-[#F3F4F2] text-[#111315] flex flex-col items-center justify-center p-6 relative">
-          <OfflineIndicator />
-        <div className="fixed top-[calc(1rem+env(safe-area-inset-top))] right-4 z-30">
-          <PWAInstallButton />
-        </div>
-        <div className="w-full max-w-sm bg-white rounded-3xl border border-black/8 shadow-[0_10px_32px_rgba(17,19,21,0.06)] p-6 space-y-5 text-center">
-          <div className="space-y-1.5">
-            <img
-              src="/inflate-mark.png"
-              alt="Inflate emblem"
-              referrerPolicy="no-referrer"
-              className="w-10 h-10 mx-auto mb-2 object-contain"
-            />
-            <p className="font-brand text-sm tracking-[0.42em] pl-[0.42em] uppercase text-[#111315]">
-              INFLATE
-            </p>
-            <h1 className="font-display text-xl font-semibold tracking-tight text-[#111315]">
-              Sign in to sync your garage
-            </h1>
-            <p className="text-xs text-[#5E646A] leading-relaxed">
-              Keep your tyre pressure logs, purchase history, renewals, and contacts saved across devices.
-            </p>
-          </div>
-
-          {authError && (
-            <p className="text-xs text-[#D9480F] bg-[#FFF4EE] border border-[#FF5A1F]/20 rounded-xl px-3 py-2 text-left">
-              {authError}
-            </p>
-          )}
-
-          <button
-            type="button"
-            onClick={handleGoogleSignIn}
-            disabled={signingIn}
-            className="w-full h-12 rounded-2xl bg-[#111315] text-white text-sm font-semibold hover:bg-black/85 disabled:opacity-60 transition-colors flex items-center justify-center gap-2.5 cursor-pointer"
-          >
-            {signingIn ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <svg viewBox="0 0 24 24" className="w-4 h-4" aria-hidden="true">
-                <path
-                  fill="#ffffff"
-                  d="M21.35 11.1h-9.17v2.73h6.51c-.33 3.81-3.5 5.44-6.5 5.44C8.36 19.27 5 16.25 5 12c0-4.1 3.2-7.27 7.2-7.27c3.09 0 4.9 1.97 4.9 1.97L19 4.72S16.56 2 12.1 2C6.42 2 2.03 6.8 2.03 12c0 5.05 4.13 10 10.22 10c5.35 0 9.25-3.67 9.25-9.09c0-1.15-.15-1.81-.15-1.81Z"
-                />
-              </svg>
-            )}
-            <span>{signingIn ? 'Signing in...' : 'Continue with Google'}</span>
-          </button>
-        </div>
-      </div>
+        <SignInScreen
+          signingIn={signingIn}
+          syncing={isInteractiveSyncing}
+          authError={authError}
+          onSignIn={handleGoogleSignIn}
+        />
       );
     }
 
@@ -517,7 +516,7 @@ export default function App() {
             </div>
 
             {/* Bird's-Eye Car Image without box */}
-            <div className="flex-1 lg:flex-none min-h-[160px] max-h-[255px] lg:h-[clamp(180px,31dvh,310px)] lg:max-h-[310px] relative">
+            <div className="flex-1 lg:flex-none min-h-[160px] max-h-[330px] md:max-h-[255px] lg:h-[clamp(180px,31dvh,310px)] lg:max-h-[310px] py-2 md:py-0 relative">
               <CarBirdsEyeView
                 car={carWithSortedLogs}
                 selectedCorner={selectedCorner}
@@ -527,7 +526,7 @@ export default function App() {
             </div>
 
             {/* 4 Corner Boxes: FL, FR, RL, RR showing set kPa, age top-right, and PSI bottom-right */}
-            <div className="shrink-0 grid grid-cols-2 gap-2.5">
+            <div className="shrink-0 mt-auto md:mt-0 pb-1.5 md:pb-0 grid grid-cols-2 gap-2.5">
               {TYRE_CORNERS.map((corner) => {
                 const setKpa = activeCar.recommendedKpa[corner];
                 const psiApprox = Math.round(setKpa * 0.145);
@@ -638,7 +637,7 @@ export default function App() {
         {showSplash && (
           <SplashScreen
             key="inflate-splash"
-            stillLoading={!manualSplashOpen && introComplete && isHydrating}
+            stillLoading={!manualSplashOpen && introComplete && isBootHydrating}
             interactive={manualSplashOpen}
             onDismiss={() => setManualSplashOpen(false)}
           />

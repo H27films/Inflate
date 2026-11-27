@@ -13,7 +13,8 @@ import {
   writeBatch,
   type FieldValue,
 } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '../firebase';
+import { getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage';
+import { db, handleFirestoreError, OperationType, storage } from '../firebase';
 import { INITIAL_CONTACTS, INITIAL_GARAGE } from '../data/initialGarage';
 import {
   CarId,
@@ -282,41 +283,169 @@ function sanitizeAxle(val: unknown): TyreAxle {
   return val === 'Back' ? 'Back' : 'Front';
 }
 
+function resolveCanonicalTyreImageFileName(
+  carId: CarId,
+  axle: TyreAxle,
+  brandModel: string
+): string | undefined {
+  const normalized = brandModel.trim().toLowerCase();
+  if (carId === 'slk250' && axle === 'Front' && normalized.includes('prinx')) {
+    return 'slk350-front-prinx.png';
+  }
+  if (carId === 'slk250' && axle === 'Back' && normalized.includes('powertrac')) {
+    return 'slk350-back-powertrac.png';
+  }
+  if (carId === 'fortuner' && axle === 'Front' && normalized.includes('fortune')) {
+    return 'fortuner-front-fortune.png';
+  }
+  return undefined;
+}
+
+export function buildCanonicalTyreImageFileName(
+  carId: CarId,
+  axle: TyreAxle,
+  brandModel: string
+): string {
+  const carKey = carId === 'slk250' ? 'slk350' : 'fortuner';
+  const axleKey = axle.toLowerCase() === 'back' ? 'back' : 'front';
+  const brandSlug = (brandModel.trim().split(/\s+/)[0] || 'tyre')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+  return `${carKey}-${axleKey}-${brandSlug || 'tyre'}.png`.slice(0, 120);
+}
+
+async function uploadLocalAssetToFirebaseStorage(fileName: string): Promise<string | null> {
+  try {
+    const fileRef = storageRef(storage, `savedTyres/${fileName}`);
+    try {
+      return await getDownloadURL(fileRef);
+    } catch {
+      // Not uploaded yet — fetch bundled PNG from /assets/tyres and upload
+    }
+    const res = await fetch(`/assets/tyres/${fileName}`);
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    await uploadBytes(fileRef, blob, { contentType: 'image/png' });
+    return await getDownloadURL(fileRef);
+  } catch {
+    return null;
+  }
+}
+
+export async function uploadCustomTyrePngToFirebaseStorage(
+  fileName: string,
+  file: Blob
+): Promise<string | null> {
+  try {
+    const cleanName = fileName.toLowerCase().replace(/[^a-z0-9.-]/g, '');
+    const fileRef = storageRef(storage, `savedTyres/${cleanName}`);
+    await uploadBytes(fileRef, file, { contentType: 'image/png' });
+    return await getDownloadURL(fileRef);
+  } catch {
+    return null;
+  }
+}
+
 async function seedSavedTyresIfEmpty(uid: string): Promise<void> {
   try {
     const existingTyresSnap = await getDocs(
       query(collection(db, 'savedTyres'), where('ownerId', '==', uid))
     );
-    if (!existingTyresSnap.empty) return;
-
-    const batch = writeBatch(db);
-    const carIds: CarId[] = ['slk250', 'fortuner'];
-    for (const carId of carIds) {
-      const carDocId = makeDocId(uid, carId);
-      const starterTyres = INITIAL_GARAGE[carId].savedTyres ?? [];
-      for (const tyre of starterTyres) {
-        const ref = doc(db, 'savedTyres', makeDocId(uid, tyre.id));
-        const cleanNotes = sanitizeOptionalString(tyre.notes, 300);
-        const docData: Record<string, unknown> = {
-          ownerId: uid,
-          carId,
-          carDocId,
-          brandModel: tyre.brandModel.slice(0, 120),
-          price: Math.max(0, Math.min(100000, Number(tyre.price) || 0)),
-          axle: sanitizeAxle(tyre.axle),
-          tyreSize: tyre.tyreSize.slice(0, 80),
-          wheelImageKey: sanitizeWheelKey(tyre.wheelImageKey),
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        };
-        if (cleanNotes) docData.notes = cleanNotes;
-        batch.set(ref, docData);
+    if (existingTyresSnap.empty) {
+      const batch = writeBatch(db);
+      const carIds: CarId[] = ['slk250', 'fortuner'];
+      for (const carId of carIds) {
+        const carDocId = makeDocId(uid, carId);
+        const starterTyres = INITIAL_GARAGE[carId].savedTyres ?? [];
+        for (const tyre of starterTyres) {
+          const ref = doc(db, 'savedTyres', makeDocId(uid, tyre.id));
+          const cleanNotes = sanitizeOptionalString(tyre.notes, 300);
+          const cleanFileName = sanitizeOptionalString(tyre.imageFileName, 120);
+          const cleanImageUrl = sanitizeOptionalString(tyre.imageUrl, 500);
+          const docData: Record<string, unknown> = {
+            ownerId: uid,
+            carId,
+            carDocId,
+            brandModel: tyre.brandModel.slice(0, 120),
+            price: Math.max(0, Math.min(100000, Number(tyre.price) || 0)),
+            axle: sanitizeAxle(tyre.axle),
+            tyreSize: tyre.tyreSize.slice(0, 80),
+            wheelImageKey: sanitizeWheelKey(tyre.wheelImageKey),
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          };
+          if (cleanFileName) docData.imageFileName = cleanFileName;
+          if (cleanImageUrl) docData.imageUrl = cleanImageUrl;
+          if (cleanNotes) docData.notes = cleanNotes;
+          batch.set(ref, docData);
+        }
+      }
+      await batch.commit();
+    } else {
+      // Link any existing matching tyre records that were seeded before cutout PNGs were added
+      const linkBatch = writeBatch(db);
+      let hasUpdates = false;
+      existingTyresSnap.forEach((docSnap) => {
+        const d = docSnap.data();
+        const carId = d.carId as CarId;
+        if (carId !== 'slk250' && carId !== 'fortuner') return;
+        const axle = sanitizeAxle(d.axle);
+        const brandModel = String(d.brandModel ?? '');
+        const canonicalFile = resolveCanonicalTyreImageFileName(carId, axle, brandModel);
+        if (!canonicalFile) return;
+        const currentFile = typeof d.imageFileName === 'string' ? d.imageFileName : undefined;
+        const currentUrl = typeof d.imageUrl === 'string' ? d.imageUrl : undefined;
+        if (currentFile !== canonicalFile || !currentUrl) {
+          hasUpdates = true;
+          linkBatch.update(docSnap.ref, {
+            imageFileName: canonicalFile,
+            imageUrl: currentUrl || `/assets/tyres/${canonicalFile}`,
+            updatedAt: serverTimestamp(),
+          });
+        }
+      });
+      if (hasUpdates) {
+        await linkBatch.commit();
       }
     }
-    await batch.commit();
+
+    // Best-effort sync of canonical cutout PNGs to Firebase Storage and link download URLs
+    void syncCanonicalTyresToStorage(uid);
   } catch (error) {
     // Non-fatal if live Firestore rules have not been updated for /savedTyres yet
     console.warn('Saved tyres seed skipped until Firestore rules allow /savedTyres:', error);
+  }
+}
+
+async function syncCanonicalTyresToStorage(uid: string): Promise<void> {
+  try {
+    const snap = await getDocs(
+      query(collection(db, 'savedTyres'), where('ownerId', '==', uid))
+    );
+    if (snap.empty) return;
+
+    for (const docSnap of snap.docs) {
+      const d = docSnap.data();
+      const carId = d.carId as CarId;
+      if (carId !== 'slk250' && carId !== 'fortuner') continue;
+      const fileName =
+        (typeof d.imageFileName === 'string' && d.imageFileName) ||
+        resolveCanonicalTyreImageFileName(carId, sanitizeAxle(d.axle), String(d.brandModel ?? ''));
+      if (!fileName) continue;
+      const currentUrl = typeof d.imageUrl === 'string' ? d.imageUrl : '';
+      if (currentUrl.startsWith('https://firebasestorage.googleapis.com/')) continue;
+
+      const storageUrl = await uploadLocalAssetToFirebaseStorage(fileName);
+      if (storageUrl && storageUrl.length <= 500) {
+        await updateDoc(docSnap.ref, {
+          imageFileName: fileName,
+          imageUrl: storageUrl,
+          updatedAt: serverTimestamp(),
+        });
+      }
+    }
+  } catch {
+    // Storage rules or offline state: local /assets/tyres PNG URLs remain active
   }
 }
 
@@ -496,11 +625,19 @@ export function subscribeToUserGarage(
           axle: sanitizeAxle(d.axle),
           tyreSize: String(d.tyreSize ?? INITIAL_GARAGE[carId].defaultSizes.front),
           wheelImageKey: sanitizeWheelKey(d.wheelImageKey),
+          ...(typeof d.imageFileName === 'string' && d.imageFileName
+            ? { imageFileName: d.imageFileName }
+            : {}),
+          ...(typeof d.imageUrl === 'string' && d.imageUrl ? { imageUrl: d.imageUrl } : {}),
           ...(d.notes ? { notes: String(d.notes) } : {}),
         });
       });
       const sortItems = (list: SavedTyreOption[]) =>
-        list.sort((a, b) => (sortMeta.get(a.id) ?? 0) - (sortMeta.get(b.id) ?? 0) || a.id.localeCompare(b.id));
+        list.sort((a, b) => {
+          const axleDiff = (a.axle === 'Front' ? 0 : 1) - (b.axle === 'Front' ? 0 : 1);
+          if (axleDiff !== 0) return axleDiff;
+          return (sortMeta.get(a.id) ?? 0) - (sortMeta.get(b.id) ?? 0) || a.id.localeCompare(b.id);
+        });
       sortItems(grouped.slk250);
       sortItems(grouped.fortuner);
       callbacks.onSavedTyresRulesPending?.(false);
@@ -730,6 +867,13 @@ export async function addSavedTyreRecord(
   const id = makeDocId(uid, `tyre-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`);
   const path = `savedTyres/${id}`;
   const cleanNotes = sanitizeOptionalString(entry.notes, 300);
+  const axle = sanitizeAxle(entry.axle);
+  const canonicalFile =
+    sanitizeOptionalString(entry.imageFileName, 120) ??
+    resolveCanonicalTyreImageFileName(carId, axle, entry.brandModel);
+  const cleanImageUrl =
+    sanitizeOptionalString(entry.imageUrl, 500) ??
+    (canonicalFile ? `/assets/tyres/${canonicalFile}` : undefined);
 
   const payload: Record<string, unknown> = {
     ownerId: uid,
@@ -737,17 +881,31 @@ export async function addSavedTyreRecord(
     carDocId: makeDocId(uid, carId),
     brandModel: (entry.brandModel.trim() || 'Tyre Option').slice(0, 120),
     price: Math.max(0, Math.min(100000, Number(entry.price) || 0)),
-    axle: sanitizeAxle(entry.axle),
+    axle,
     tyreSize: (entry.tyreSize.trim() || INITIAL_GARAGE[carId].defaultSizes.front).slice(0, 80),
     wheelImageKey: sanitizeWheelKey(entry.wheelImageKey),
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   };
+  if (canonicalFile) payload.imageFileName = canonicalFile;
+  if (cleanImageUrl) payload.imageUrl = cleanImageUrl;
   if (cleanNotes) payload.notes = cleanNotes;
 
   try {
     await setDoc(doc(db, 'savedTyres', id), payload);
   } catch (error) {
+    const msg = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+    if (msg.includes('permission') && ('imageFileName' in payload || 'imageUrl' in payload)) {
+      const legacyPayload = { ...payload };
+      delete legacyPayload.imageFileName;
+      delete legacyPayload.imageUrl;
+      try {
+        await setDoc(doc(db, 'savedTyres', id), legacyPayload);
+        return;
+      } catch (retryError) {
+        handleFirestoreError(retryError, OperationType.CREATE, path);
+      }
+    }
     handleFirestoreError(error, OperationType.CREATE, path);
   }
 }
@@ -759,13 +917,22 @@ export async function updateSavedTyreRecord(
 ): Promise<void> {
   const path = `savedTyres/${id}`;
   const cleanNotes = sanitizeOptionalString(entry.notes, 300);
+  const axle = sanitizeAxle(entry.axle);
+  const canonicalFile =
+    sanitizeOptionalString(entry.imageFileName, 120) ??
+    resolveCanonicalTyreImageFileName(carId, axle, entry.brandModel);
+  const cleanImageUrl =
+    sanitizeOptionalString(entry.imageUrl, 500) ??
+    (canonicalFile ? `/assets/tyres/${canonicalFile}` : undefined);
 
   const updates: Record<string, unknown | FieldValue> = {
     brandModel: (entry.brandModel.trim() || 'Tyre Option').slice(0, 120),
     price: Math.max(0, Math.min(100000, Number(entry.price) || 0)),
-    axle: sanitizeAxle(entry.axle),
+    axle,
     tyreSize: (entry.tyreSize.trim() || INITIAL_GARAGE[carId].defaultSizes.front).slice(0, 80),
     wheelImageKey: sanitizeWheelKey(entry.wheelImageKey),
+    imageFileName: canonicalFile ?? deleteField(),
+    imageUrl: cleanImageUrl ?? deleteField(),
     notes: cleanNotes ?? deleteField(),
     updatedAt: serverTimestamp(),
   };
@@ -773,6 +940,18 @@ export async function updateSavedTyreRecord(
   try {
     await updateDoc(doc(db, 'savedTyres', id), updates);
   } catch (error) {
+    const msg = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+    if (msg.includes('permission')) {
+      const legacyUpdates = { ...updates };
+      delete legacyUpdates.imageFileName;
+      delete legacyUpdates.imageUrl;
+      try {
+        await updateDoc(doc(db, 'savedTyres', id), legacyUpdates);
+        return;
+      } catch (retryError) {
+        handleFirestoreError(retryError, OperationType.UPDATE, path);
+      }
+    }
     handleFirestoreError(error, OperationType.UPDATE, path);
   }
 }

@@ -215,7 +215,8 @@ service cloud.firestore {
         ])
         && data.keys().hasOnly([
           'ownerId', 'carId', 'carDocId', 'brandModel', 'price',
-          'axle', 'tyreSize', 'wheelImageKey', 'notes', 'createdAt', 'updatedAt'
+          'axle', 'tyreSize', 'wheelImageKey', 'imageFileName', 'imageUrl',
+          'notes', 'createdAt', 'updatedAt'
         ])
         && data.ownerId == request.auth.uid
         && isValidCarKey(data.carId)
@@ -225,6 +226,8 @@ service cloud.firestore {
         && isValidAxle(data.axle)
         && data.tyreSize is string && data.tyreSize.size() >= 1 && data.tyreSize.size() <= 80
         && isValidWheelImageKey(data.wheelImageKey)
+        && (!('imageFileName' in data) || (data.imageFileName is string && data.imageFileName.size() <= 120 && data.imageFileName.matches('^[a-z0-9-]+\\.png$')))
+        && isOptionalString(data, 'imageUrl', 500)
         && isOptionalString(data, 'notes', 300)
         && data.createdAt is timestamp
         && data.updatedAt is timestamp;
@@ -344,7 +347,7 @@ service cloud.firestore {
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'brandModel', 'price', 'axle', 'tyreSize', 'wheelImageKey', 'notes', 'updatedAt'
+          'brandModel', 'price', 'axle', 'tyreSize', 'wheelImageKey', 'imageFileName', 'imageUrl', 'notes', 'updatedAt'
         ]);
       allow delete: if isValidId(tyreId) && isOwner(existing().ownerId);
     }

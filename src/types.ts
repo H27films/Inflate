@@ -66,6 +66,8 @@ export interface SavedTyreOption {
   axle: TyreAxle;
   tyreSize: string;
   wheelImageKey: WheelImageKey;
+  imageFileName?: string;
+  imageUrl?: string;
   notes?: string;
 }
 

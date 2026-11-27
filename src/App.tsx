@@ -428,6 +428,7 @@ export default function App() {
               car={carWithSortedLogs}
               contacts={contacts}
               addModalOpen={addPurchaseOpen}
+              onOpenAddModal={() => setAddPurchaseOpen(true)}
               onCloseAddModal={() => setAddPurchaseOpen(false)}
               onAddPurchase={handleAddPurchase}
               onDeletePurchase={handleDeletePurchase}

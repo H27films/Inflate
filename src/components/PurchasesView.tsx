@@ -1,28 +1,39 @@
-import { useEffect, useRef, useState, type ClipboardEvent, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent, type ClipboardEvent, type FormEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { Plus, Trash2, X, Store, Ruler, Globe, Phone, ClipboardPaste, Check, ChevronDown } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, X, Store, Ruler, Globe, Phone, ClipboardPaste, Check, ChevronDown, Disc, Upload } from 'lucide-react';
 import {
   CarProfile,
   CORNER_LABELS,
   PurchaseLogEntry,
   SavedTyreOption,
   TYRE_CORNERS,
+  TyreAxle,
   TyreContact,
   TyreCorner,
+  WheelImageKey,
 } from '../types';
 import {
   formatDisplayDate,
   formatTyreAge,
+  formatTyreAgeMonths,
+  getCarTyreSizingOptions,
   getCornerPurchaseInfo,
   getTodayIso,
+  matchCarTyreSizeOption,
   parseLocalDate,
 } from '../data/initialGarage';
-import { SavedTyresCarousel } from './SavedTyresCarousel';
+import {
+  buildCanonicalTyreImageFileName,
+  uploadCustomTyrePngToFirebaseStorage,
+} from '../services/garageFirestore';
+import { SavedTyresCarousel, WHEEL_STYLE_OPTIONS } from './SavedTyresCarousel';
 
 interface PurchasesViewProps {
   car: CarProfile;
   contacts: TyreContact[];
   addModalOpen: boolean;
+  onOpenAddModal?: () => void;
   onCloseAddModal: () => void;
   onAddPurchase: (entry: Omit<PurchaseLogEntry, 'id'>) => void;
   onDeletePurchase: (id: string) => void;
@@ -315,6 +326,7 @@ export function PurchasesView({
   car,
   contacts,
   addModalOpen,
+  onOpenAddModal,
   onCloseAddModal,
   onAddPurchase,
   onDeletePurchase,
@@ -331,6 +343,7 @@ export function PurchasesView({
   const [purchaseLogExpanded, setPurchaseLogExpanded] = useState(true);
   const [installationsExpanded, setInstallationsExpanded] = useState(false);
   const [contactsExpanded, setContactsExpanded] = useState(false);
+  const [focusedAxle, setFocusedAxle] = useState<TyreAxle | null>(null);
 
   const allCollapsed =
     !purchaseLogExpanded && !installationsExpanded && !contactsExpanded;
@@ -338,14 +351,44 @@ export function PurchasesView({
   useEffect(() => {
     onExpandedChange?.(!allCollapsed);
   }, [allCollapsed, onExpandedChange]);
+
+  useEffect(() => {
+    setFocusedAxle(null);
+  }, [car.id]);
+
+  useEffect(() => {
+    if (!focusedAxle) return;
+    const handleGlobalClick = (e: MouseEvent) => {
+      const target = e.target;
+      if (target instanceof Element) {
+        if (
+          target.closest('[data-focus-interactive="true"]') ||
+          target.closest('[role="dialog"]')
+        ) {
+          return;
+        }
+      }
+      setFocusedAxle(null);
+    };
+    document.addEventListener('click', handleGlobalClick);
+    return () => document.removeEventListener('click', handleGlobalClick);
+  }, [focusedAxle]);
+
   const [editingContactId, setEditingContactId] = useState<string | null>(null);
   const [entryMode, setEntryMode] = useState<'details' | 'paste'>('details');
   const [pasteText, setPasteText] = useState('');
   const [parsedSuccess, setParsedSuccess] = useState(false);
   const [highlightedPurchaseId, setHighlightedPurchaseId] = useState<string | null>(null);
+  const [highlightedContactId, setHighlightedContactId] = useState<string | null>(null);
   const purchaseRowRefs = useRef<Record<string, HTMLLIElement | null>>({});
+  const contactRowRefs = useRef<Record<string, HTMLLIElement | null>>({});
+  const pendingContactScrollRef = useRef<string | null>(null);
   const contactsSectionRef = useRef<HTMLElement | null>(null);
   const installationsSectionRef = useRef<HTMLElement | null>(null);
+  const pendingPresetAxleRef = useRef<TyreAxle | null>(null);
+
+  // Add (+) modal state: 'choose' -> 'purchase' | 'tyre'
+  const [addMode, setAddMode] = useState<'choose' | 'purchase' | 'tyre'>('choose');
 
   // Purchase form state
   const [date, setDate] = useState(getTodayIso());
@@ -356,26 +399,79 @@ export function PurchasesView({
   const [totalCost, setTotalCost] = useState('');
   const [notes, setNotes] = useState('');
 
+  // Add-to-carousel tyre form state
+  const [carouselBrandModel, setCarouselBrandModel] = useState('');
+  const [carouselPrice, setCarouselPrice] = useState('');
+  const [carouselAxle, setCarouselAxle] = useState<TyreAxle>('Front');
+  const [carouselTyreSize, setCarouselTyreSize] = useState(car.defaultSizes.front);
+  const [carouselWheelKey, setCarouselWheelKey] = useState<WheelImageKey>(
+    car.bodyStyle === 'suv' ? 'all-terrain' : 'sport-5spoke'
+  );
+  const [carouselImageFileName, setCarouselImageFileName] = useState<string | undefined>(undefined);
+  const [carouselImageUrl, setCarouselImageUrl] = useState<string | undefined>(undefined);
+  const [carouselNotes, setCarouselNotes] = useState('');
+  const [savingCarouselTyre, setSavingCarouselTyre] = useState(false);
+  const [uploadingCarouselPng, setUploadingCarouselPng] = useState(false);
+  const [carouselFormError, setCarouselFormError] = useState<string | null>(null);
+  const carouselFileInputRef = useRef<HTMLInputElement | null>(null);
+
   // Contact form state
   const [company, setCompany] = useState('');
   const [website, setWebsite] = useState('');
   const [phone, setPhone] = useState('');
   const [contactNotes, setContactNotes] = useState('');
 
+  const sizingOptions = getCarTyreSizingOptions(car);
+  const garageOptions = Array.from(
+    new Map(
+      [
+        ...contacts.map((c) => c.company.trim()),
+        ...car.purchaseLogs.map((p) => p.vendor.trim()),
+      ]
+        .filter(Boolean)
+        .map((name) => [name.toLowerCase(), name] as const)
+    ).values()
+  ).sort((a, b) => a.localeCompare(b));
+  const [useCustomGarage, setUseCustomGarage] = useState(false);
+
   useEffect(() => {
     if (addModalOpen) {
+      const presetAxle = pendingPresetAxleRef.current;
+      pendingPresetAxleRef.current = null;
+      setAddMode(presetAxle ? 'purchase' : 'choose');
       setDate(getTodayIso());
-      setVendor('');
+      setVendor(garageOptions[0] ?? '');
+      setUseCustomGarage(garageOptions.length === 0);
       setBrandModel('');
-      setTyreSize(car.defaultSizes.front);
-      setCorners(['FL', 'FR', 'RL', 'RR']);
+      setTyreSize(
+        presetAxle === 'Back' ? car.defaultSizes.rear : car.defaultSizes.front
+      );
+      setCorners(
+        presetAxle === 'Front'
+          ? ['FL', 'FR']
+          : presetAxle === 'Back'
+            ? ['RL', 'RR']
+            : ['FL', 'FR', 'RL', 'RR']
+      );
       setTotalCost('');
       setNotes('');
       setPasteText('');
       setParsedSuccess(false);
       setEntryMode('details');
+
+      setCarouselBrandModel('');
+      setCarouselPrice('');
+      setCarouselAxle(presetAxle ?? 'Front');
+      setCarouselTyreSize(
+        presetAxle === 'Back' ? car.defaultSizes.rear : car.defaultSizes.front
+      );
+      setCarouselWheelKey(car.bodyStyle === 'suv' ? 'all-terrain' : 'sport-5spoke');
+      setCarouselImageFileName(undefined);
+      setCarouselImageUrl(undefined);
+      setCarouselNotes('');
+      setCarouselFormError(null);
     }
-  }, [addModalOpen, car.id, car.defaultSizes.front]);
+  }, [addModalOpen, car.id, car.bodyStyle, car.defaultSizes.front, car.defaultSizes.rear]);
 
   useEffect(() => {
     if (!highlightedPurchaseId) return;
@@ -384,6 +480,14 @@ export function PurchasesView({
     }, 1800);
     return () => window.clearTimeout(timer);
   }, [highlightedPurchaseId]);
+
+  useEffect(() => {
+    if (!highlightedContactId) return;
+    const timer = window.setTimeout(() => {
+      setHighlightedContactId(null);
+    }, 2800);
+    return () => window.clearTimeout(timer);
+  }, [highlightedContactId]);
 
   const scrollToBottomOfPage = () => {
     window.scrollTo({
@@ -397,6 +501,25 @@ export function PurchasesView({
 
   useEffect(() => {
     if (!contactsExpanded) return;
+    if (pendingContactScrollRef.current) {
+      const targetId = pendingContactScrollRef.current;
+      const t = window.setTimeout(() => {
+        const el = contactRowRefs.current[targetId];
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          setHighlightedContactId(targetId);
+        }
+      }, 280);
+      const clearRefTimer = window.setTimeout(() => {
+        if (pendingContactScrollRef.current === targetId) {
+          pendingContactScrollRef.current = null;
+        }
+      }, 450);
+      return () => {
+        window.clearTimeout(t);
+        window.clearTimeout(clearRefTimer);
+      };
+    }
     const t1 = window.setTimeout(scrollToBottomOfPage, 100);
     const t2 = window.setTimeout(scrollToBottomOfPage, 320);
     return () => {
@@ -433,47 +556,216 @@ export function PurchasesView({
     );
   };
 
+  const handleNavigateToContact = (
+    vendorName: string,
+    matched?: TyreContact | null
+  ) => {
+    const targetContact = matched ?? findMatchingContact(vendorName, contacts);
+    setFocusedAxle(null);
+    setPurchaseLogExpanded(false);
+    setInstallationsExpanded(false);
+
+    if (targetContact) {
+      if (contactsExpanded) {
+        window.setTimeout(() => {
+          contactRowRefs.current[targetContact.id]?.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center',
+          });
+          setHighlightedContactId(targetContact.id);
+        }, 60);
+      } else {
+        pendingContactScrollRef.current = targetContact.id;
+        setContactsExpanded(true);
+      }
+    } else {
+      setContactsExpanded(true);
+    }
+  };
+
   const sortedPurchases = [...car.purchaseLogs].sort((a, b) =>
     b.date.localeCompare(a.date)
   );
 
-  const getAxleAge = (cornersPair: [TyreCorner, TyreCorner]): string => {
+  const getLatestAxlePurchase = (
+    cornersPair: [TyreCorner, TyreCorner]
+  ): PurchaseLogEntry | null => {
     const first = getCornerPurchaseInfo(car.purchaseLogs, cornersPair[0]);
     const second = getCornerPurchaseInfo(car.purchaseLogs, cornersPair[1]);
-    const latest =
-      first && second
-        ? first.date >= second.date
-          ? first
-          : second
-        : first ?? second;
-    return latest ? formatTyreAge(latest.date) : '—';
+    return first && second
+      ? first.date >= second.date
+        ? first
+        : second
+      : first ?? second ?? null;
   };
 
-  const frontAge = getAxleAge(['FL', 'FR']);
-  const rearAge = getAxleAge(['RL', 'RR']);
+  const frontPurchase = getLatestAxlePurchase(['FL', 'FR']);
+  const rearPurchase = getLatestAxlePurchase(['RL', 'RR']);
+  const frontAge = frontPurchase
+    ? focusedAxle === 'Front'
+      ? formatTyreAgeMonths(frontPurchase.date)
+      : formatTyreAge(frontPurchase.date)
+    : '—';
+  const rearAge = rearPurchase
+    ? focusedAxle === 'Back'
+      ? formatTyreAgeMonths(rearPurchase.date)
+      : formatTyreAge(rearPurchase.date)
+    : '—';
+
+  const focusedPurchase =
+    focusedAxle === 'Front'
+      ? frontPurchase
+      : focusedAxle === 'Back'
+        ? rearPurchase
+        : null;
+  const focusedContact = focusedPurchase
+    ? findMatchingContact(focusedPurchase.vendor, contacts)
+    : undefined;
+
+  const handleToggleAxleFocus = (axle: TyreAxle) => {
+    if (focusedAxle === axle) {
+      setFocusedAxle(null);
+      return;
+    }
+    setPurchaseLogExpanded(false);
+    setInstallationsExpanded(false);
+    setContactsExpanded(false);
+    setFocusedAxle(axle);
+  };
+
+  const handleAddPurchaseForAxle = (axle: TyreAxle) => {
+    pendingPresetAxleRef.current = axle;
+    setFocusedAxle(null);
+    onOpenAddModal?.();
+  };
 
   const toggleCorner = (corner: TyreCorner) => {
-    setCorners((prev) =>
-      prev.includes(corner)
-        ? prev.length > 1
-          ? prev.filter((c) => c !== corner)
-          : prev
-        : [...prev, corner]
-    );
+    setCorners((prev) => {
+      const wasSelected = prev.includes(corner);
+      if (wasSelected && prev.length <= 1) return prev;
+      const next = wasSelected
+        ? prev.filter((c) => c !== corner)
+        : [...prev, corner];
+      const hasFront = next.includes('FL') || next.includes('FR');
+      const hasRear = next.includes('RL') || next.includes('RR');
+      if (hasFront && !hasRear) {
+        setTyreSize(car.defaultSizes.front);
+      } else if (hasRear && !hasFront) {
+        setTyreSize(car.defaultSizes.rear);
+      } else if (!wasSelected) {
+        setTyreSize(
+          corner === 'RL' || corner === 'RR'
+            ? car.defaultSizes.rear
+            : car.defaultSizes.front
+        );
+      }
+      return next;
+    });
   };
 
   const applyParsedText = (raw: string) => {
     if (!raw.trim()) return;
     const parsed = parsePurchaseText(raw, car);
     if (parsed.date) setDate(parsed.date);
-    if (parsed.vendor) setVendor(parsed.vendor);
+    if (parsed.vendor) {
+      const matchedGarage = garageOptions.find(
+        (g) => g.toLowerCase() === parsed.vendor!.trim().toLowerCase()
+      );
+      if (matchedGarage) {
+        setVendor(matchedGarage);
+        setUseCustomGarage(false);
+      } else {
+        setVendor(parsed.vendor);
+        setUseCustomGarage(true);
+      }
+    }
     if (parsed.brandModel) setBrandModel(parsed.brandModel);
-    if (parsed.tyreSize) setTyreSize(parsed.tyreSize);
-    if (parsed.corners && parsed.corners.length > 0) setCorners(parsed.corners);
+    if (parsed.corners && parsed.corners.length > 0) {
+      setCorners(parsed.corners);
+      const hasFront = parsed.corners.includes('FL') || parsed.corners.includes('FR');
+      const hasRear = parsed.corners.includes('RL') || parsed.corners.includes('RR');
+      if (hasRear && !hasFront) {
+        setTyreSize(car.defaultSizes.rear);
+      } else if (hasFront && !hasRear) {
+        setTyreSize(car.defaultSizes.front);
+      }
+    }
+    const matchedSize = matchCarTyreSizeOption(parsed.tyreSize, car);
+    if (matchedSize) {
+      setTyreSize(matchedSize);
+    }
     if (parsed.totalCost) setTotalCost(parsed.totalCost);
     if (parsed.notes) setNotes(parsed.notes);
     setParsedSuccess(true);
     setEntryMode('details');
+  };
+
+  const handleCarouselAxleChange = (nextAxle: TyreAxle) => {
+    setCarouselAxle(nextAxle);
+    setCarouselTyreSize(
+      nextAxle === 'Front' ? car.defaultSizes.front : car.defaultSizes.rear
+    );
+  };
+
+  const handleCarouselPngUpload = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setUploadingCarouselPng(true);
+    setCarouselFormError(null);
+    try {
+      const targetName = buildCanonicalTyreImageFileName(
+        car.id,
+        carouselAxle,
+        carouselBrandModel || file.name.replace(/\.[^.]+$/, '')
+      );
+      const uploadedUrl = await uploadCustomTyrePngToFirebaseStorage(targetName, file);
+      if (!uploadedUrl) {
+        setCarouselFormError('Firebase Storage upload is not permitted yet for this bucket.');
+        return;
+      }
+      setCarouselImageFileName(targetName);
+      setCarouselImageUrl(uploadedUrl);
+    } finally {
+      setUploadingCarouselPng(false);
+    }
+  };
+
+  const handleCarouselTyreSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (savingCarouselTyre) return;
+    setCarouselFormError(null);
+    setSavingCarouselTyre(true);
+    const payload: Omit<SavedTyreOption, 'id'> = {
+      brandModel: carouselBrandModel.trim(),
+      price: Math.max(0, Number(carouselPrice) || 0),
+      axle: carouselAxle,
+      tyreSize:
+        carouselTyreSize.trim() ||
+        (carouselAxle === 'Front' ? car.defaultSizes.front : car.defaultSizes.rear),
+      wheelImageKey: carouselWheelKey,
+      ...(carouselImageFileName ? { imageFileName: carouselImageFileName } : {}),
+      ...(carouselImageUrl ? { imageUrl: carouselImageUrl } : {}),
+      notes: carouselNotes.trim() || undefined,
+    };
+
+    try {
+      await onAddSavedTyre(payload);
+      setPurchaseLogExpanded(false);
+      setInstallationsExpanded(false);
+      setContactsExpanded(false);
+      setFocusedAxle(null);
+      onCloseAddModal();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unable to save tyre option.';
+      setCarouselFormError(
+        msg.toLowerCase().includes('permission')
+          ? 'Publish the savedTyres Firestore rule first to save changes.'
+          : msg
+      );
+    } finally {
+      setSavingCarouselTyre(false);
+    }
   };
 
   const handlePasteClip = (e: ClipboardEvent<HTMLTextAreaElement>) => {
@@ -563,33 +855,177 @@ export function PurchasesView({
               </span>
             </div>
 
-            <div className="grid grid-cols-2 gap-2.5">
-              <div className="p-3.5 rounded-2xl bg-[#16191D] text-white">
-                <div className="flex items-baseline justify-between gap-2">
-                  <span className="text-[11px] font-medium text-white/65">
-                    Front (FL / FR)
+            <div className="flex items-stretch overflow-visible py-1">
+              <motion.div
+                initial={false}
+                animate={{
+                  width:
+                    focusedAxle === 'Front'
+                      ? '100%'
+                      : focusedAxle === 'Back'
+                        ? '0%'
+                        : 'calc(50% - 5px)',
+                  marginRight: focusedAxle === null ? 10 : 0,
+                  opacity: focusedAxle === 'Back' ? 0 : 1,
+                  scale: focusedAxle === 'Back' ? 0.96 : 1,
+                }}
+                transition={{
+                  duration: 0.34,
+                  ease: [0.22, 1, 0.36, 1],
+                }}
+                className={`relative shrink-0 overflow-visible ${
+                  focusedAxle === 'Back' ? 'pointer-events-none' : ''
+                }`}
+              >
+                {focusedAxle === 'Front' && (
+                  <motion.div
+                    aria-hidden="true"
+                    initial={{ opacity: 0.16, scale: 0.995 }}
+                    animate={{
+                      opacity: [0.16, 0.42, 0.16],
+                      scale: [0.995, 1.008, 0.995],
+                    }}
+                    transition={{
+                      duration: 2.0,
+                      repeat: Infinity,
+                      ease: 'easeInOut',
+                    }}
+                    className="pointer-events-none absolute -inset-1 rounded-[20px] bg-gradient-to-r from-[#FF5A1F]/28 via-[#FF8A4C]/18 to-[#FF5A1F]/28 blur-[8px]"
+                  />
+                )}
+                <motion.button
+                  type="button"
+                  data-focus-interactive="true"
+                  onClick={() => handleToggleAxleFocus('Front')}
+                  aria-pressed={focusedAxle === 'Front'}
+                  animate={{
+                    boxShadow:
+                      focusedAxle === 'Front'
+                        ? [
+                            '0 4px 14px rgba(17,19,21,0.16), 0 0 8px rgba(255,90,31,0.12), 0 0 0 1px rgba(255,90,31,0.22)',
+                            '0 8px 20px rgba(17,19,21,0.22), 0 0 16px rgba(255,90,31,0.28), 0 0 0 1px rgba(255,90,31,0.45)',
+                          ]
+                        : '0 2px 8px rgba(17,19,21,0.08), 0 0 0px rgba(255,90,31,0), 0 0 0 0px rgba(255,90,31,0)',
+                  }}
+                  transition={{
+                    boxShadow:
+                      focusedAxle === 'Front'
+                        ? {
+                            duration: 2.0,
+                            repeat: Infinity,
+                            repeatType: 'reverse',
+                            ease: 'easeInOut',
+                          }
+                        : { duration: 0.24 },
+                  }}
+                  className={`relative z-10 w-full overflow-hidden text-left rounded-2xl bg-[#16191D] text-white cursor-pointer transition-colors hover:bg-[#1E2228] focus:outline-none ${
+                    focusedAxle === 'Back' ? 'p-0' : 'p-3.5'
+                  }`}
+                >
+                  <div className="flex items-baseline justify-between gap-2 min-w-0">
+                    <span
+                      className={`font-semibold whitespace-nowrap transition-all ${
+                        focusedAxle === 'Front'
+                          ? 'text-sm sm:text-[15px] text-white'
+                          : 'text-[13px] sm:text-sm text-white/80'
+                      }`}
+                    >
+                      Front (FL / FR)
+                    </span>
+                    <span className="font-display text-sm font-bold tabular-nums text-white whitespace-nowrap shrink-0">
+                      {frontAge}
+                    </span>
+                  </div>
+                  <span className="mt-1 font-mono text-[12.5px] sm:text-sm font-semibold text-white whitespace-nowrap block">
+                    {car.defaultSizes.front}
                   </span>
-                  <span className="font-display text-sm font-bold tabular-nums text-white">
-                    {frontAge}
+                </motion.button>
+              </motion.div>
+
+              <motion.div
+                initial={false}
+                animate={{
+                  width:
+                    focusedAxle === 'Back'
+                      ? '100%'
+                      : focusedAxle === 'Front'
+                        ? '0%'
+                        : 'calc(50% - 5px)',
+                  opacity: focusedAxle === 'Front' ? 0 : 1,
+                  scale: focusedAxle === 'Front' ? 0.96 : 1,
+                }}
+                transition={{
+                  duration: 0.34,
+                  ease: [0.22, 1, 0.36, 1],
+                }}
+                className={`relative shrink-0 overflow-visible ${
+                  focusedAxle === 'Front' ? 'pointer-events-none' : ''
+                }`}
+              >
+                {focusedAxle === 'Back' && (
+                  <motion.div
+                    aria-hidden="true"
+                    initial={{ opacity: 0.16, scale: 0.995 }}
+                    animate={{
+                      opacity: [0.16, 0.42, 0.16],
+                      scale: [0.995, 1.008, 0.995],
+                    }}
+                    transition={{
+                      duration: 2.0,
+                      repeat: Infinity,
+                      ease: 'easeInOut',
+                    }}
+                    className="pointer-events-none absolute -inset-1 rounded-[20px] bg-gradient-to-r from-[#FF5A1F]/28 via-[#FF8A4C]/18 to-[#FF5A1F]/28 blur-[8px]"
+                  />
+                )}
+                <motion.button
+                  type="button"
+                  data-focus-interactive="true"
+                  onClick={() => handleToggleAxleFocus('Back')}
+                  aria-pressed={focusedAxle === 'Back'}
+                  animate={{
+                    boxShadow:
+                      focusedAxle === 'Back'
+                        ? [
+                            '0 4px 14px rgba(17,19,21,0.16), 0 0 8px rgba(255,90,31,0.12), 0 0 0 1px rgba(255,90,31,0.22)',
+                            '0 8px 20px rgba(17,19,21,0.22), 0 0 16px rgba(255,90,31,0.28), 0 0 0 1px rgba(255,90,31,0.45)',
+                          ]
+                        : '0 2px 8px rgba(17,19,21,0.08), 0 0 0px rgba(255,90,31,0), 0 0 0 0px rgba(255,90,31,0)',
+                  }}
+                  transition={{
+                    boxShadow:
+                      focusedAxle === 'Back'
+                        ? {
+                            duration: 2.0,
+                            repeat: Infinity,
+                            repeatType: 'reverse',
+                            ease: 'easeInOut',
+                          }
+                        : { duration: 0.24 },
+                  }}
+                  className={`relative z-10 w-full overflow-hidden text-left rounded-2xl bg-[#16191D] text-white cursor-pointer transition-colors hover:bg-[#1E2228] focus:outline-none ${
+                    focusedAxle === 'Front' ? 'p-0' : 'p-3.5'
+                  }`}
+                >
+                  <div className="flex items-baseline justify-between gap-2 min-w-0">
+                    <span
+                      className={`font-semibold whitespace-nowrap transition-all ${
+                        focusedAxle === 'Back'
+                          ? 'text-sm sm:text-[15px] text-white'
+                          : 'text-[13px] sm:text-sm text-white/80'
+                      }`}
+                    >
+                      Back (RL / RR)
+                    </span>
+                    <span className="font-display text-sm font-bold tabular-nums text-white whitespace-nowrap shrink-0">
+                      {rearAge}
+                    </span>
+                  </div>
+                  <span className="mt-1 font-mono text-[12.5px] sm:text-sm font-semibold text-white whitespace-nowrap block">
+                    {car.defaultSizes.rear}
                   </span>
-                </div>
-                <span className="mt-1 font-mono text-[12.5px] sm:text-sm font-semibold text-white whitespace-nowrap block">
-                  {car.defaultSizes.front}
-                </span>
-              </div>
-              <div className="p-3.5 rounded-2xl bg-[#16191D] text-white">
-                <div className="flex items-baseline justify-between gap-2">
-                  <span className="text-[11px] font-medium text-white/65">
-                    Back (RL / RR)
-                  </span>
-                  <span className="font-display text-sm font-bold tabular-nums text-white">
-                    {rearAge}
-                  </span>
-                </div>
-                <span className="mt-1 font-mono text-[12.5px] sm:text-sm font-semibold text-white whitespace-nowrap block">
-                  {car.defaultSizes.rear}
-                </span>
-              </div>
+                </motion.button>
+              </motion.div>
             </div>
           </section>
 
@@ -601,6 +1037,11 @@ export function PurchasesView({
             <SavedTyresCarousel
               car={car}
               tyres={car.savedTyres ?? []}
+              focusedAxle={focusedAxle}
+              focusedPurchase={focusedPurchase}
+              focusedContact={focusedContact}
+              onNavigateToContact={handleNavigateToContact}
+              onAddPurchaseForAxle={handleAddPurchaseForAxle}
               rulesPending={savedTyresRulesPending}
               onAddTyre={onAddSavedTyre}
               onUpdateTyre={onUpdateSavedTyre}
@@ -609,8 +1050,9 @@ export function PurchasesView({
           )}
         </AnimatePresence>
 
-        {/* Bottom Stacked Drawers: Purchase log (Back) + Installation by Tyre (Middle) + Contacts (Front) */}
-        <div className="mt-3 px-1.5 sm:px-3">
+        {/* Bottom Stacked Drawers: Hidden while an axle is focused; Purchase log + Installation + Contacts */}
+        {focusedAxle === null && (
+          <div className="mt-3 px-1.5 sm:px-3">
           {/* Purchase History Logs (Expanded by default, collapses down to stack above Installation by Tyre) */}
           <section
             className={`relative z-0 overflow-hidden transition-all duration-300 rounded-t-3xl rounded-b-none ring-1 ring-black/[0.05] ${
@@ -941,7 +1383,9 @@ export function PurchasesView({
                   exit={{ height: 0, opacity: 0 }}
                   transition={{ duration: 0.3, ease: [0.42, 0, 0.58, 1] }}
                   onAnimationComplete={() => {
-                    scrollToBottomOfPage();
+                    if (!highlightedContactId && !pendingContactScrollRef.current) {
+                      scrollToBottomOfPage();
+                    }
                   }}
                   className="overflow-hidden"
                 >
@@ -966,13 +1410,25 @@ export function PurchasesView({
                       </div>
                     ) : (
                       <ul className="divide-y divide-white/10">
-                        {contacts.map((contact) => (
-                          <li key={contact.id} className="py-3 first:pt-1 last:pb-1">
-                            <div className="flex items-center justify-between gap-3">
-                              <div className="min-w-0 space-y-1">
-                                <p className="font-display font-semibold text-sm text-white truncate">
-                                  {contact.company}
-                                </p>
+                        {contacts.map((contact) => {
+                          const isHighlighted = highlightedContactId === contact.id;
+                          return (
+                            <li
+                              key={contact.id}
+                              ref={(el) => {
+                                contactRowRefs.current[contact.id] = el;
+                              }}
+                              className={`py-3 first:pt-1 last:pb-1 transition-all duration-300 ${
+                                isHighlighted
+                                  ? 'bg-white/14 ring-2 ring-[#FF5A1F] shadow-[0_0_20px_rgba(255,90,31,0.28)] rounded-2xl px-3 -mx-3'
+                                  : ''
+                              }`}
+                            >
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="min-w-0 space-y-1">
+                                  <p className="font-display font-semibold text-sm text-white truncate">
+                                    {contact.company}
+                                  </p>
 
                                 <div className="flex items-center gap-3 text-xs text-white/70 flex-wrap">
                                   {contact.phone && (
@@ -1044,9 +1500,10 @@ export function PurchasesView({
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </button>
                               </div>
-                            </div>
-                          </li>
-                        ))}
+                              </div>
+                            </li>
+                          );
+                        })}
                       </ul>
                     )}
                   </div>
@@ -1055,231 +1512,572 @@ export function PurchasesView({
             </AnimatePresence>
           </section>
         </div>
+        )}
       </motion.div>
 
-      {/* Add Purchase Slide-Up Modal */}
-      <AnimatePresence>
-        {addModalOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center p-0 sm:p-4"
-            onClick={onCloseAddModal}
-          >
-            <motion.form
-              initial={{ y: 40, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: 40, opacity: 0 }}
-              transition={{ type: 'spring', stiffness: 360, damping: 32 }}
-              onClick={(e) => e.stopPropagation()}
-              onSubmit={handleSubmit}
-              className="w-full max-w-md bg-white rounded-t-3xl sm:rounded-3xl p-5 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto"
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="font-display text-lg font-semibold text-[#111315]">
-                    Log tyre purchase
-                  </h3>
-                  <p className="text-xs text-[#5E646A]">
-                    {car.displayTitle} ({car.trim})
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={onCloseAddModal}
-                  aria-label="Close modal"
-                  className="w-10 h-10 rounded-full bg-[#F3F4F2] flex items-center justify-center text-[#111315] cursor-pointer"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              {/* Entry Mode Segmented Control: Enter details vs Paste text */}
-              <div className="grid grid-cols-2 gap-1 p-1 rounded-2xl bg-[#F3F4F2] border border-black/6">
-                <button
-                  type="button"
-                  onClick={() => setEntryMode('details')}
-                  className={`h-9 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                    entryMode === 'details'
-                      ? 'bg-white text-[#111315] shadow-sm'
-                      : 'text-[#5E646A] hover:text-[#111315]'
-                  }`}
-                >
-                  Enter details
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setEntryMode('paste')}
-                  className={`h-9 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                    entryMode === 'paste'
-                      ? 'bg-white text-[#111315] shadow-sm'
-                      : 'text-[#5E646A] hover:text-[#111315]'
-                  }`}
-                >
-                  <ClipboardPaste className="w-3.5 h-3.5" />
-                  <span>Paste text</span>
-                </button>
-              </div>
-
-              {entryMode === 'paste' ? (
-                <div className="space-y-3">
-                  <label className="block">
-                    <span className="text-xs font-medium text-[#5E646A]">
-                      Paste receipt, booking, or WhatsApp quote
-                    </span>
-                    <textarea
-                      rows={7}
-                      autoFocus
-                      value={pasteText}
-                      onPaste={handlePasteClip}
-                      onChange={(e) => setPasteText(e.target.value)}
-                      placeholder={`Paste details here...\ne.g.\nDate: 21 Aug 2026\nPosition: Front (2 tyres)\nWorkshop: Car Speed Auto Service\nTyre make and model: Prinx Aquila REV\nTyre size: 225/40R18 92Y\nTotal: RM567.50`}
-                      className="mt-1.5 w-full p-3 rounded-2xl bg-[#F3F4F2] border border-black/8 text-xs text-[#111315] leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-[#111315]"
-                    />
-                  </label>
+      {/* Add Modal: Drops down from top below header, portaled above BottomNav */}
+      {typeof document !== 'undefined' &&
+        createPortal(
+          <AnimatePresence>
+            {addModalOpen && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-50 bg-black/40 flex items-start justify-center pt-[calc(4.15rem+env(safe-area-inset-top))] px-0 sm:px-4"
+                onClick={onCloseAddModal}
+              >
+                {addMode === 'choose' ? (
+                  <motion.div
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="Add tyre or purchase"
+                    initial={{ y: -24, opacity: 0, scale: 0.98 }}
+                    animate={{ y: 0, opacity: 1, scale: 1 }}
+                    exit={{ y: -20, opacity: 0, scale: 0.98 }}
+                    transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="mx-3.5 sm:mx-0 w-full max-w-md bg-white rounded-3xl p-5 space-y-4 shadow-2xl"
+                  >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-display text-lg font-semibold text-[#111315]">
+                      Add to garage
+                    </h3>
+                    <p className="text-xs text-[#5E646A]">
+                      {car.displayTitle} ({car.trim})
+                    </p>
+                  </div>
                   <button
                     type="button"
-                    onClick={() => applyParsedText(pasteText)}
-                    disabled={!pasteText.trim()}
-                    className="w-full h-12 rounded-2xl bg-[#111315] text-white text-sm font-semibold hover:bg-black/85 disabled:opacity-40 transition-colors cursor-pointer"
+                    onClick={onCloseAddModal}
+                    aria-label="Close modal"
+                    className="w-10 h-10 rounded-full bg-[#F3F4F2] flex items-center justify-center text-[#111315] cursor-pointer"
                   >
-                    Fill details from text
+                    <X className="w-4 h-4" />
                   </button>
                 </div>
-              ) : (
-                <>
-                  {parsedSuccess && (
-                    <div className="px-3 py-2 rounded-xl bg-[#F3F4F2] border border-black/7 flex items-center gap-2 text-xs font-medium text-[#111315]">
-                      <Check className="w-3.5 h-3.5 shrink-0" />
-                      <span>Details filled from pasted text — review and save</span>
-                    </div>
-                  )}
 
-                  <div>
-                    <span className="text-xs font-medium text-[#5E646A] block mb-2">
-                      Which tyres were replaced?
-                    </span>
-                    <div className="grid grid-cols-4 gap-2">
-                      {TYRE_CORNERS.map((corner) => {
-                        const selected = corners.includes(corner);
-                        return (
-                          <button
-                            key={corner}
-                            type="button"
-                            onClick={() => toggleCorner(corner)}
-                            className={`h-11 rounded-xl font-mono text-xs font-semibold border transition-colors cursor-pointer ${
-                              selected
-                                ? 'bg-[#111315] text-white border-[#111315]'
-                                : 'bg-[#F3F4F2] text-[#5E646A] border-black/8 hover:text-[#111315]'
-                            }`}
-                          >
-                            {corner}
-                          </button>
-                        );
-                      })}
+                <div className="grid grid-cols-1 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setAddMode('purchase')}
+                    className="w-full p-4 rounded-2xl bg-[#16191D] text-white hover:bg-[#1E2228] active:scale-[0.99] transition-all flex items-center gap-3.5 text-left cursor-pointer"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center shrink-0">
+                      <Store className="w-4.5 h-4.5 text-white" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-display text-sm font-semibold text-white">
+                        Log tyre purchase
+                      </p>
+                      <p className="mt-0.5 text-xs text-white/65">
+                        Record fitted tyres, workshop, date &amp; cost
+                      </p>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setAddMode('tyre')}
+                    className="w-full p-4 rounded-2xl bg-[#F3F4F2] text-[#111315] border border-black/8 hover:bg-[#EAECE8] active:scale-[0.99] transition-all flex items-center gap-3.5 text-left cursor-pointer"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-white border border-black/8 flex items-center justify-center shrink-0">
+                      <Disc className="w-4.5 h-4.5 text-[#111315]" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-display text-sm font-semibold text-[#111315]">
+                        Add tyres
+                      </p>
+                      <p className="mt-0.5 text-xs text-[#5E646A]">
+                        Save a tyre option &amp; price to the carousel
+                      </p>
+                    </div>
+                  </button>
+                </div>
+              </motion.div>
+            ) : addMode === 'tyre' ? (
+              <motion.form
+                role="dialog"
+                aria-modal="true"
+                aria-label="Add tyre to carousel"
+                initial={{ y: -24, opacity: 0, scale: 0.98 }}
+                animate={{ y: 0, opacity: 1, scale: 1 }}
+                exit={{ y: -20, opacity: 0, scale: 0.98 }}
+                transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+                onClick={(e) => e.stopPropagation()}
+                onSubmit={handleCarouselTyreSubmit}
+                className="w-full max-w-md h-[calc(100dvh-4.15rem-env(safe-area-inset-top))] bg-white rounded-t-3xl rounded-b-none px-5 pt-4 pb-[calc(1.25rem+env(safe-area-inset-bottom))] space-y-3 shadow-2xl overflow-y-auto flex flex-col justify-between"
+              >
+                <div className="space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setAddMode('choose')}
+                      aria-label="Back to options"
+                      className="w-9 h-9 rounded-full bg-[#F3F4F2] flex items-center justify-center text-[#111315] hover:bg-[#E7E9E5] cursor-pointer"
+                    >
+                      <ArrowLeft className="w-4 h-4" />
+                    </button>
+                    <div>
+                      <h3 className="font-display text-lg font-semibold text-[#111315]">
+                        Add tyres
+                      </h3>
+                      <p className="text-xs text-[#5E646A]">
+                        {car.displayTitle} ({car.trim})
+                      </p>
                     </div>
                   </div>
+                  <button
+                    type="button"
+                    onClick={onCloseAddModal}
+                    aria-label="Close modal"
+                    className="w-10 h-10 rounded-full bg-[#F3F4F2] flex items-center justify-center text-[#111315] cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <label className="block">
-                      <span className="text-xs font-medium text-[#5E646A]">Purchase date</span>
-                      <input
-                        type="date"
-                        required
-                        value={date}
-                        onChange={(e) => setDate(e.target.value)}
-                        className="mt-1 w-full h-11 px-3 rounded-xl bg-[#F3F4F2] border border-black/8 text-xs font-mono text-[#111315]"
-                      />
+                {/* Wheel Image Style Picker */}
+                <div>
+                  <div className="flex items-center justify-between gap-2 mb-1.5">
+                    <label className="block text-xs font-medium text-[#5E646A]">
+                      Wheel style
                     </label>
-                    <label className="block">
-                      <span className="text-xs font-medium text-[#5E646A]">Total cost (RM)</span>
-                      <input
-                        type="number"
-                        min={0}
-                        step="0.01"
-                        required
-                        placeholder="567.50"
-                        value={totalCost}
-                        onChange={(e) => setTotalCost(e.target.value)}
-                        className="mt-1 w-full h-11 px-3 rounded-xl bg-[#F3F4F2] border border-black/8 text-sm font-mono font-semibold tabular-nums text-[#111315]"
-                      />
-                    </label>
-                  </div>
-
-                  <label className="block">
-                    <span className="text-xs font-medium text-[#5E646A]">
-                      Bought from (Workshop)
-                    </span>
+                    <button
+                      type="button"
+                      disabled={uploadingCarouselPng}
+                      onClick={() => carouselFileInputRef.current?.click()}
+                      className="inline-flex items-center gap-1 text-[11px] font-medium text-[#111315] hover:text-[#FF5A1F] transition-colors cursor-pointer disabled:opacity-50"
+                    >
+                      <Upload className="w-3 h-3" />
+                      <span>
+                        {uploadingCarouselPng
+                          ? 'Uploading...'
+                          : carouselImageFileName
+                            ? 'Replace PNG'
+                            : 'Upload PNG'}
+                      </span>
+                    </button>
                     <input
-                      type="text"
-                      required
-                      placeholder="e.g. Car Speed Auto Service"
-                      value={vendor}
-                      onChange={(e) => setVendor(e.target.value)}
-                      className="mt-1 w-full h-11 px-3 rounded-xl bg-[#F3F4F2] border border-black/8 text-sm text-[#111315]"
+                      ref={carouselFileInputRef}
+                      type="file"
+                      accept="image/png"
+                      onChange={handleCarouselPngUpload}
+                      className="hidden"
                     />
-                  </label>
+                  </div>
+                  {carouselImageFileName && (
+                    <p className="mb-2 text-[11px] font-mono text-[#5E646A] truncate">
+                      Linked cutout: {carouselImageFileName}
+                    </p>
+                  )}
+                  <div className="grid grid-cols-4 gap-2">
+                    {WHEEL_STYLE_OPTIONS.map((opt) => {
+                      const selected = !carouselImageFileName && carouselWheelKey === opt.key;
+                      return (
+                        <button
+                          key={opt.key}
+                          type="button"
+                          onClick={() => {
+                            setCarouselWheelKey(opt.key);
+                            setCarouselImageFileName(undefined);
+                            setCarouselImageUrl(undefined);
+                          }}
+                          className={`p-1.5 rounded-2xl border flex flex-col items-center gap-1 transition-all cursor-pointer ${
+                            selected
+                              ? 'border-[#111315] bg-[#F3F4F2] ring-1 ring-[#111315]'
+                              : 'border-black/10 bg-white hover:bg-[#F7F8F6]'
+                          }`}
+                        >
+                          <img
+                            src={opt.src}
+                            alt={opt.label}
+                            referrerPolicy="no-referrer"
+                            className="w-11 h-11 object-contain"
+                          />
+                          <span className="text-[10px] font-medium text-[#111315] whitespace-nowrap">
+                            {opt.label}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Front / Back Axle Selector */}
+                <div>
+                  <label className="block text-xs font-medium text-[#5E646A] mb-1.5">
+                    Axle
+                  </label>
+                  <div className="grid grid-cols-2 gap-2 p-1 rounded-xl bg-[#F3F4F2]">
+                    {(['Front', 'Back'] as TyreAxle[]).map((option) => {
+                      const active = carouselAxle === option;
+                      return (
+                        <button
+                          key={option}
+                          type="button"
+                          onClick={() => handleCarouselAxleChange(option)}
+                          className={`min-h-[40px] rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                            active
+                              ? 'bg-[#111315] text-white shadow-xs'
+                              : 'text-[#5E646A] hover:text-[#111315]'
+                          }`}
+                        >
+                          {option}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-[#5E646A] mb-1">
+                      Tyre size
+                    </label>
+                    <select
+                      required
+                      value={carouselTyreSize}
+                      onChange={(e) => setCarouselTyreSize(e.target.value)}
+                      className="w-full min-h-[42px] px-3 py-2 rounded-xl bg-[#F3F4F2] border border-black/8 font-mono text-xs text-[#111315] focus:outline-none focus:ring-2 focus:ring-[#111315]"
+                    >
+                      {sizingOptions.map((size) => (
+                        <option key={size} value={size}>
+                          {size}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-[#5E646A] mb-1">
+                      Price per tyre (RM)
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min="0"
+                      step="0.01"
+                      value={carouselPrice}
+                      onChange={(e) => setCarouselPrice(e.target.value)}
+                      placeholder="259"
+                      className="w-full min-h-[42px] px-3 py-2 rounded-xl bg-[#F3F4F2] border border-black/8 font-mono text-sm text-[#111315] focus:outline-none focus:ring-2 focus:ring-[#111315]"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-[#5E646A] mb-1">
+                    Tyre name
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={carouselBrandModel}
+                    onChange={(e) => setCarouselBrandModel(e.target.value)}
+                    placeholder="e.g. Michelin Pilot Sport 5"
+                    className="w-full min-h-[42px] px-3 py-2 rounded-xl bg-[#F3F4F2] border border-black/8 text-sm text-[#111315] focus:outline-none focus:ring-2 focus:ring-[#111315]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-[#5E646A] mb-1">
+                    Notes (optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={carouselNotes}
+                    onChange={(e) => setCarouselNotes(e.target.value)}
+                    placeholder="e.g. Car Speed quote · Includes balancing"
+                    className="w-full min-h-[42px] px-3 py-2 rounded-xl bg-[#F3F4F2] border border-black/8 text-sm text-[#111315] focus:outline-none focus:ring-2 focus:ring-[#111315]"
+                  />
+                </div>
+
+                {carouselFormError && (
+                  <p className="text-xs text-[#991B1B] bg-red-50 border border-red-200 rounded-xl px-3 py-2">
+                    {carouselFormError}
+                  </p>
+                )}
+
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={savingCarouselTyre}
+                  className="w-full h-12 shrink-0 rounded-2xl bg-[#111315] text-white text-sm font-semibold hover:bg-black/85 transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  {savingCarouselTyre ? 'Saving...' : 'Add to carousel'}
+                </button>
+              </motion.form>
+            ) : (
+              <motion.form
+                role="dialog"
+                aria-modal="true"
+                aria-label="Log tyre purchase"
+                initial={{ y: -24, opacity: 0, scale: 0.98 }}
+                animate={{ y: 0, opacity: 1, scale: 1 }}
+                exit={{ y: -20, opacity: 0, scale: 0.98 }}
+                transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+                onClick={(e) => e.stopPropagation()}
+                onSubmit={handleSubmit}
+                className="w-full max-w-md h-[calc(100dvh-4.15rem-env(safe-area-inset-top))] bg-white rounded-t-3xl rounded-b-none px-5 pt-4 pb-[calc(1.25rem+env(safe-area-inset-bottom))] space-y-3 shadow-2xl overflow-y-auto flex flex-col justify-between"
+              >
+                <div className="space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setAddMode('choose')}
+                      aria-label="Back to options"
+                      className="w-9 h-9 rounded-full bg-[#F3F4F2] flex items-center justify-center text-[#111315] hover:bg-[#E7E9E5] cursor-pointer"
+                    >
+                      <ArrowLeft className="w-4 h-4" />
+                    </button>
+                    <div>
+                      <h3 className="font-display text-lg font-semibold text-[#111315]">
+                        Log tyre purchase
+                      </h3>
+                      <p className="text-xs text-[#5E646A]">
+                        {car.displayTitle} ({car.trim})
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={onCloseAddModal}
+                    aria-label="Close modal"
+                    className="w-10 h-10 rounded-full bg-[#F3F4F2] flex items-center justify-center text-[#111315] cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Entry Mode Segmented Control: Enter details vs Paste text */}
+                <div className="grid grid-cols-2 gap-1 p-1 rounded-2xl bg-[#F3F4F2] border border-black/6">
+                  <button
+                    type="button"
+                    onClick={() => setEntryMode('details')}
+                    className={`h-9 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                      entryMode === 'details'
+                        ? 'bg-white text-[#111315] shadow-sm'
+                        : 'text-[#5E646A] hover:text-[#111315]'
+                    }`}
+                  >
+                    Enter details
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEntryMode('paste')}
+                    className={`h-9 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                      entryMode === 'paste'
+                        ? 'bg-white text-[#111315] shadow-sm'
+                        : 'text-[#5E646A] hover:text-[#111315]'
+                    }`}
+                  >
+                    <ClipboardPaste className="w-3.5 h-3.5" />
+                    <span>Paste text</span>
+                  </button>
+                </div>
+
+                {entryMode === 'paste' ? (
+                  <div className="space-y-3">
                     <label className="block">
-                      <span className="text-xs font-medium text-[#5E646A]">Tyre brand & model</span>
+                      <span className="text-xs font-medium text-[#5E646A]">
+                        Paste receipt, booking, or WhatsApp quote
+                      </span>
+                      <textarea
+                        rows={7}
+                        autoFocus
+                        value={pasteText}
+                        onPaste={handlePasteClip}
+                        onChange={(e) => setPasteText(e.target.value)}
+                        placeholder={`Paste details here...\ne.g.\nDate: 21 Aug 2026\nPosition: Front (2 tyres)\nWorkshop: Car Speed Auto Service\nTyre make and model: Prinx Aquila REV\nTyre size: 225/40R18 92Y\nTotal: RM567.50`}
+                        className="mt-1.5 w-full p-3 rounded-2xl bg-[#F3F4F2] border border-black/8 text-xs text-[#111315] leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-[#111315]"
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => applyParsedText(pasteText)}
+                      disabled={!pasteText.trim()}
+                      className="w-full h-12 rounded-2xl bg-[#111315] text-white text-sm font-semibold hover:bg-black/85 disabled:opacity-40 transition-colors cursor-pointer"
+                    >
+                      Fill details from text
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    {parsedSuccess && (
+                      <div className="px-3 py-2 rounded-xl bg-[#F3F4F2] border border-black/7 flex items-center gap-2 text-xs font-medium text-[#111315]">
+                        <Check className="w-3.5 h-3.5 shrink-0" />
+                        <span>Details filled from pasted text — review and save</span>
+                      </div>
+                    )}
+
+                    <div>
+                      <span className="text-xs font-medium text-[#5E646A] block mb-2">
+                        Which tyres were replaced?
+                      </span>
+                      <div className="grid grid-cols-4 gap-2">
+                        {TYRE_CORNERS.map((corner) => {
+                          const selected = corners.includes(corner);
+                          return (
+                            <button
+                              key={corner}
+                              type="button"
+                              onClick={() => toggleCorner(corner)}
+                              className={`h-11 rounded-xl font-mono text-xs font-semibold border transition-colors cursor-pointer ${
+                                selected
+                                  ? 'bg-[#111315] text-white border-[#111315]'
+                                  : 'bg-[#F3F4F2] text-[#5E646A] border-black/8 hover:text-[#111315]'
+                              }`}
+                            >
+                              {corner}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <label className="block">
+                        <span className="text-xs font-medium text-[#5E646A]">Purchase date</span>
+                        <input
+                          type="date"
+                          required
+                          value={date}
+                          onChange={(e) => setDate(e.target.value)}
+                          className="mt-1 w-full h-11 px-3 rounded-xl bg-[#F3F4F2] border border-black/8 text-xs font-mono text-[#111315]"
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="text-xs font-medium text-[#5E646A]">Total cost (RM)</span>
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          required
+                          placeholder="567.50"
+                          value={totalCost}
+                          onChange={(e) => setTotalCost(e.target.value)}
+                          className="mt-1 w-full h-11 px-3 rounded-xl bg-[#F3F4F2] border border-black/8 text-sm font-mono font-semibold tabular-nums text-[#111315]"
+                        />
+                      </label>
+                    </div>
+
+                    <div>
+                      <label className="block">
+                        <span className="text-xs font-medium text-[#5E646A]">
+                          Garage / Workshop
+                        </span>
+                        {garageOptions.length > 0 && (
+                          <select
+                            value={useCustomGarage ? '__new__' : vendor}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val === '__new__') {
+                                setUseCustomGarage(true);
+                                setVendor('');
+                              } else {
+                                setUseCustomGarage(false);
+                                setVendor(val);
+                              }
+                            }}
+                            className="mt-1 w-full h-11 px-3 rounded-xl bg-[#F3F4F2] border border-black/8 text-sm text-[#111315] focus:outline-none focus:ring-2 focus:ring-[#111315]"
+                          >
+                            {garageOptions.map((garageName) => (
+                              <option key={garageName} value={garageName}>
+                                {garageName}
+                              </option>
+                            ))}
+                            <option value="__new__">+ Enter new garage...</option>
+                          </select>
+                        )}
+                      </label>
+                      {(useCustomGarage || garageOptions.length === 0) && (
+                        <input
+                          type="text"
+                          required
+                          autoFocus={useCustomGarage && garageOptions.length > 0}
+                          placeholder="Enter new garage name..."
+                          value={vendor}
+                          onChange={(e) => setVendor(e.target.value)}
+                          className="mt-2 w-full h-11 px-3 rounded-xl bg-[#F3F4F2] border border-black/8 text-sm text-[#111315] focus:outline-none focus:ring-2 focus:ring-[#111315]"
+                        />
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <label className="block">
+                        <span className="text-xs font-medium text-[#5E646A]">Tyre brand & model</span>
+                        <input
+                          type="text"
+                          required
+                          placeholder="Prinx Aquila REV"
+                          value={brandModel}
+                          onChange={(e) => setBrandModel(e.target.value)}
+                          className="mt-1 w-full h-11 px-3 rounded-xl bg-[#F3F4F2] border border-black/8 text-sm text-[#111315]"
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="text-xs font-medium text-[#5E646A]">Tyre sizing</span>
+                        <select
+                          required
+                          value={tyreSize}
+                          onChange={(e) => setTyreSize(e.target.value)}
+                          className="mt-1 w-full h-11 px-3 rounded-xl bg-[#F3F4F2] border border-black/8 text-sm font-mono text-[#111315]"
+                        >
+                          {sizingOptions.map((size) => (
+                            <option key={size} value={size}>
+                              {size}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+
+                    <label className="block">
+                      <span className="text-xs font-medium text-[#5E646A]">Notes (optional)</span>
                       <input
                         type="text"
-                        required
-                        placeholder="Prinx Aquila REV"
-                        value={brandModel}
-                        onChange={(e) => setBrandModel(e.target.value)}
+                        placeholder="Includes alignment & balancing"
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
                         className="mt-1 w-full h-11 px-3 rounded-xl bg-[#F3F4F2] border border-black/8 text-sm text-[#111315]"
                       />
                     </label>
-                    <label className="block">
-                      <span className="text-xs font-medium text-[#5E646A]">Tyre sizing</span>
-                      <input
-                        type="text"
-                        required
-                        placeholder="225/40 R18 92Y"
-                        value={tyreSize}
-                        onChange={(e) => setTyreSize(e.target.value)}
-                        className="mt-1 w-full h-11 px-3 rounded-xl bg-[#F3F4F2] border border-black/8 text-sm font-mono text-[#111315]"
-                      />
-                    </label>
-                  </div>
+                  </>
+                )}
+                </div>
 
-                  <label className="block">
-                    <span className="text-xs font-medium text-[#5E646A]">Notes (optional)</span>
-                    <input
-                      type="text"
-                      placeholder="Includes alignment & balancing"
-                      value={notes}
-                      onChange={(e) => setNotes(e.target.value)}
-                      className="mt-1 w-full h-11 px-3 rounded-xl bg-[#F3F4F2] border border-black/8 text-sm text-[#111315]"
-                    />
-                  </label>
-
+                {entryMode === 'details' && (
                   <button
                     type="submit"
-                    className="w-full h-12 rounded-2xl bg-[#111315] text-white text-sm font-semibold hover:bg-black/85 transition-colors cursor-pointer"
+                    className="w-full h-12 shrink-0 rounded-2xl bg-[#111315] text-white text-sm font-semibold hover:bg-black/85 transition-colors cursor-pointer"
                   >
                     Save purchase log
                   </button>
-                </>
-              )}
-            </motion.form>
-          </motion.div>
+                )}
+              </motion.form>
+            )}
+              </motion.div>
+            )}
+          </AnimatePresence>,
+          document.body
         )}
-      </AnimatePresence>
 
-      {/* Add Contact Slide-Up Modal */}
-      <AnimatePresence>
-        {showContactModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center p-0 sm:p-4"
-            onClick={() => setShowContactModal(false)}
-          >
+      {/* Add Contact Slide-Up Modal (portaled above BottomNav) */}
+      {typeof document !== 'undefined' &&
+        createPortal(
+          <AnimatePresence>
+            {showContactModal && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center p-0 sm:p-4"
+                onClick={() => setShowContactModal(false)}
+              >
             <motion.form
               initial={{ y: 40, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
@@ -1365,10 +2163,12 @@ export function PurchasesView({
               >
                 Save contact
               </button>
-            </motion.form>
-          </motion.div>
-        )}
-      </AnimatePresence>
+              </motion.form>
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
     </>
   );
 }

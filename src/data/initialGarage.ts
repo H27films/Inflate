@@ -132,6 +132,16 @@ export const INITIAL_GARAGE: Record<CarId, CarProfile> = {
         axle: 'Front',
         tyreSize: '225/40 R18 92Y',
         wheelImageKey: 'sport-5spoke',
+        imageFileName: 'slk350-front-prinx.png',
+        imageUrl: '/assets/tyres/slk350-front-prinx.png',
+      },
+      {
+        id: 'slk-tyre-3',
+        brandModel: 'Michelin Pilot Sport 5',
+        price: 620,
+        axle: 'Front',
+        tyreSize: '225/40 R18 92Y',
+        wheelImageKey: 'sport-5spoke',
       },
       {
         id: 'slk-tyre-2',
@@ -140,14 +150,8 @@ export const INITIAL_GARAGE: Record<CarId, CarProfile> = {
         axle: 'Back',
         tyreSize: '245/35 R18 92Y',
         wheelImageKey: 'mesh-split',
-      },
-      {
-        id: 'slk-tyre-3',
-        brandModel: 'Michelin Pilot Sport 5',
-        price: 620,
-        axle: 'Front',
-        tyreSize: '225/40 R18 92Y',
-        wheelImageKey: 'turbine-dark',
+        imageFileName: 'slk350-back-powertrac.png',
+        imageUrl: '/assets/tyres/slk350-back-powertrac.png',
       },
       {
         id: 'slk-tyre-4',
@@ -155,7 +159,7 @@ export const INITIAL_GARAGE: Record<CarId, CarProfile> = {
         price: 580,
         axle: 'Back',
         tyreSize: '245/35 R18 92Y',
-        wheelImageKey: 'sport-5spoke',
+        wheelImageKey: 'turbine-dark',
       },
     ],
   },
@@ -213,14 +217,8 @@ export const INITIAL_GARAGE: Record<CarId, CarProfile> = {
         axle: 'Front',
         tyreSize: '265/65 R17',
         wheelImageKey: 'all-terrain',
-      },
-      {
-        id: 'fort-tyre-2',
-        brandModel: 'BFGoodrich Trail-Terrain',
-        price: 790,
-        axle: 'Back',
-        tyreSize: '265/65 R17',
-        wheelImageKey: 'all-terrain',
+        imageFileName: 'fortuner-front-fortune.png',
+        imageUrl: '/assets/tyres/fortuner-front-fortune.png',
       },
       {
         id: 'fort-tyre-3',
@@ -228,11 +226,42 @@ export const INITIAL_GARAGE: Record<CarId, CarProfile> = {
         price: 640,
         axle: 'Front',
         tyreSize: '265/65 R17',
+        wheelImageKey: 'all-terrain',
+      },
+      {
+        id: 'fort-tyre-2',
+        brandModel: 'BFGoodrich Trail-Terrain',
+        price: 790,
+        axle: 'Back',
+        tyreSize: '265/65 R17',
         wheelImageKey: 'turbine-dark',
       },
     ],
   },
 };
+
+export function getCarTyreSizingOptions(car: CarProfile): string[] {
+  const unique = new Set<string>();
+  if (car.defaultSizes.front?.trim()) unique.add(car.defaultSizes.front.trim());
+  if (car.defaultSizes.rear?.trim()) unique.add(car.defaultSizes.rear.trim());
+  return Array.from(unique);
+}
+
+export function matchCarTyreSizeOption(
+  rawSize: string | undefined,
+  car: CarProfile
+): string | undefined {
+  if (!rawSize) return undefined;
+  const options = getCarTyreSizingOptions(car);
+  const compactRaw = rawSize.replace(/\s+/g, '').toLowerCase();
+  const exact = options.find((opt) => opt.replace(/\s+/g, '').toLowerCase() === compactRaw);
+  if (exact) return exact;
+  const prefixMatch = options.find((opt) => {
+    const compactOpt = opt.replace(/\s+/g, '').toLowerCase();
+    return compactOpt.startsWith(compactRaw) || compactRaw.startsWith(compactOpt.slice(0, 8));
+  });
+  return prefixMatch;
+}
 
 export function parseLocalDate(dateStr: string): Date {
   const [y, m, d] = dateStr.split('-').map(Number);

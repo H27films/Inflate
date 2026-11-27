@@ -341,6 +341,17 @@
           "enum": ["sport-5spoke", "mesh-split", "turbine-dark", "all-terrain"],
           "description": "Selected studio wheel image style key."
         },
+        "imageFileName": {
+          "type": "string",
+          "maxLength": 120,
+          "pattern": "^[a-z0-9-]+\\.png$",
+          "description": "Canonical transparent PNG wheel filename ([car-key]-[axle]-[brand].png)."
+        },
+        "imageUrl": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Resolved image URL or Firebase Storage download URL for the transparent wheel cutout."
+        },
         "notes": {
           "type": "string",
           "maxLength": 300,

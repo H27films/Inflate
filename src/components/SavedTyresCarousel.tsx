@@ -1,34 +1,119 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
-import { motion } from 'motion/react';
-import { ChevronLeft, ChevronRight, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
+import { createPortal } from 'react-dom';
+import { AnimatePresence, motion } from 'motion/react';
+import { Calendar, ChevronLeft, ChevronRight, Pencil, Plus, Store, Trash2, Upload, X } from 'lucide-react';
 import {
+  CarId,
   CarProfile,
+  PurchaseLogEntry,
   SavedTyreOption,
   TyreAxle,
+  TyreContact,
   WheelImageKey,
 } from '../types';
-import sport5SpokeImg from '../assets/images/tyre_sport_5spoke_1795708408432.jpg';
-import meshSplitImg from '../assets/images/tyre_mesh_split_1795708408864.jpg';
-import turbineDarkImg from '../assets/images/tyre_turbine_dark_1795708408245.jpg';
-import allTerrainImg from '../assets/images/tyre_all_terrain_1795708408608.jpg';
+import { formatDisplayDate, getCarTyreSizingOptions } from '../data/initialGarage';
+import {
+  buildCanonicalTyreImageFileName,
+  uploadCustomTyrePngToFirebaseStorage,
+} from '../services/garageFirestore';
 
-const WHEEL_STYLE_OPTIONS: {
+const PRESET_SPORT_5SPOKE = '/assets/tyres/preset-sport-5spoke.png';
+const PRESET_MESH_SPLIT = '/assets/tyres/preset-mesh-split.png';
+const PRESET_TURBINE_DARK = '/assets/tyres/preset-turbine-dark.png';
+const PRESET_ALL_TERRAIN = '/assets/tyres/preset-all-terrain.png';
+
+export const WHEEL_STYLE_OPTIONS: {
   key: WheelImageKey;
   label: string;
   src: string;
 }[] = [
-  { key: 'sport-5spoke', label: '5-Spoke', src: sport5SpokeImg },
-  { key: 'mesh-split', label: 'Y-Mesh', src: meshSplitImg },
-  { key: 'turbine-dark', label: 'Multi-Spoke', src: turbineDarkImg },
-  { key: 'all-terrain', label: 'All-Terrain', src: allTerrainImg },
+  { key: 'sport-5spoke', label: '5-Spoke', src: PRESET_SPORT_5SPOKE },
+  { key: 'mesh-split', label: 'Y-Mesh', src: PRESET_MESH_SPLIT },
+  { key: 'turbine-dark', label: 'Multi-Spoke', src: PRESET_TURBINE_DARK },
+  { key: 'all-terrain', label: 'All-Terrain', src: PRESET_ALL_TERRAIN },
 ];
 
 const WHEEL_IMAGE_MAP: Record<WheelImageKey, string> = {
-  'sport-5spoke': sport5SpokeImg,
-  'mesh-split': meshSplitImg,
-  'turbine-dark': turbineDarkImg,
-  'all-terrain': allTerrainImg,
+  'sport-5spoke': PRESET_SPORT_5SPOKE,
+  'mesh-split': PRESET_MESH_SPLIT,
+  'turbine-dark': PRESET_TURBINE_DARK,
+  'all-terrain': PRESET_ALL_TERRAIN,
 };
+
+const WHEEL_FACEON_IMAGE_MAP: Record<WheelImageKey, string> = {
+  'sport-5spoke': '/assets/tyres/preset-sport-5spoke-faceon.png',
+  'mesh-split': '/assets/tyres/preset-mesh-split-faceon.png',
+  'turbine-dark': '/assets/tyres/preset-turbine-dark-faceon.png',
+  'all-terrain': '/assets/tyres/preset-all-terrain-faceon.png',
+};
+
+function resolveLocalCutoutFileName(
+  carId: CarId,
+  axle: TyreAxle,
+  brandModel: string
+): string | null {
+  const normalized = brandModel.trim().toLowerCase();
+  if (carId === 'slk250' && axle === 'Front' && normalized.includes('prinx')) {
+    return 'slk350-front-prinx.png';
+  }
+  if (carId === 'slk250' && axle === 'Back' && normalized.includes('powertrac')) {
+    return 'slk350-back-powertrac.png';
+  }
+  if (carId === 'fortuner' && axle === 'Front' && normalized.includes('fortune')) {
+    return 'fortuner-front-fortune.png';
+  }
+  return null;
+}
+
+function resolveTyreImage(carId: CarId, item: SavedTyreOption): string {
+  if (item.imageUrl) {
+    return item.imageUrl;
+  }
+  if (item.imageFileName) {
+    return `/assets/tyres/${item.imageFileName}`;
+  }
+  const canonical = resolveLocalCutoutFileName(carId, item.axle, item.brandModel);
+  if (canonical) {
+    return `/assets/tyres/${canonical}`;
+  }
+  return WHEEL_IMAGE_MAP[item.wheelImageKey] ?? PRESET_SPORT_5SPOKE;
+}
+
+function resolveFaceOnTyreImage(carId: CarId, item: SavedTyreOption): string {
+  const fileName =
+    item.imageFileName ??
+    resolveLocalCutoutFileName(carId, item.axle, item.brandModel);
+
+  if (fileName) {
+    if (fileName.includes('slk350-front-prinx')) {
+      return '/assets/tyres/slk350-front-prinx-faceon.png';
+    }
+    if (fileName.includes('slk350-back-powertrac')) {
+      return '/assets/tyres/slk350-back-powertrac-faceon.png';
+    }
+    if (fileName.includes('fortuner-front-fortune')) {
+      return '/assets/tyres/fortuner-front-fortune-faceon.png';
+    }
+  }
+
+  if (item.imageUrl) {
+    if (item.imageUrl.includes('slk350-front-prinx')) {
+      return '/assets/tyres/slk350-front-prinx-faceon.png';
+    }
+    if (item.imageUrl.includes('slk350-back-powertrac')) {
+      return '/assets/tyres/slk350-back-powertrac-faceon.png';
+    }
+    if (item.imageUrl.includes('fortuner-front-fortune')) {
+      return '/assets/tyres/fortuner-front-fortune-faceon.png';
+    }
+    return item.imageUrl;
+  }
+
+  return (
+    WHEEL_FACEON_IMAGE_MAP[item.wheelImageKey] ??
+    '/assets/tyres/preset-sport-5spoke-faceon.png'
+  );
+}
 
 function formatPriceRM(amount: number): string {
   return `RM${amount.toLocaleString('en-MY', {
@@ -40,6 +125,11 @@ function formatPriceRM(amount: number): string {
 interface SavedTyresCarouselProps {
   car: CarProfile;
   tyres: SavedTyreOption[];
+  focusedAxle?: TyreAxle | null;
+  focusedPurchase?: PurchaseLogEntry | null;
+  focusedContact?: TyreContact | null;
+  onNavigateToContact?: (vendor: string, contact?: TyreContact | null) => void;
+  onAddPurchaseForAxle?: (axle: TyreAxle) => void;
   rulesPending?: boolean;
   onAddTyre: (entry: Omit<SavedTyreOption, 'id'>) => Promise<void> | void;
   onUpdateTyre: (id: string, entry: Omit<SavedTyreOption, 'id'>) => Promise<void> | void;
@@ -49,6 +139,11 @@ interface SavedTyresCarouselProps {
 export function SavedTyresCarousel({
   car,
   tyres,
+  focusedAxle = null,
+  focusedPurchase = null,
+  focusedContact = null,
+  onNavigateToContact,
+  onAddPurchaseForAxle,
   rulesPending = false,
   onAddTyre,
   onUpdateTyre,
@@ -57,11 +152,17 @@ export function SavedTyresCarousel({
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const scrollRafRef = useRef<number | null>(null);
+  const isProgrammaticScrollRef = useRef(false);
+  const programmaticTimerRef = useRef<number | null>(null);
+  const prevFocusedAxleRef = useRef<TyreAxle | null>(focusedAxle);
+  const activeIndexRef = useRef(0);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [activeIndex, setActiveIndex] = useState(0);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingTyre, setEditingTyre] = useState<SavedTyreOption | null>(null);
   const [saving, setSaving] = useState(false);
+  const [uploadingPng, setUploadingPng] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
 
@@ -73,7 +174,21 @@ export function SavedTyresCarousel({
   const [wheelImageKey, setWheelImageKey] = useState<WheelImageKey>(
     car.bodyStyle === 'suv' ? 'all-terrain' : 'sport-5spoke'
   );
+  const [imageFileName, setImageFileName] = useState<string | undefined>(undefined);
+  const [imageUrl, setImageUrl] = useState<string | undefined>(undefined);
   const [notes, setNotes] = useState('');
+
+  const sortedTyres = useMemo(() => {
+    return tyres
+      .map((item, idx) => ({ item, idx }))
+      .sort((a, b) => {
+        const rankA = a.item.axle === 'Front' ? 0 : 1;
+        const rankB = b.item.axle === 'Front' ? 0 : 1;
+        if (rankA !== rankB) return rankA - rankB;
+        return a.idx - b.idx;
+      })
+      .map(({ item }) => item);
+  }, [tyres]);
 
   useEffect(() => {
     setActiveIndex(0);
@@ -83,33 +198,108 @@ export function SavedTyresCarousel({
   }, [car.id]);
 
   useEffect(() => {
-    if (activeIndex >= tyres.length && tyres.length > 0) {
-      setActiveIndex(tyres.length - 1);
+    if (activeIndex >= sortedTyres.length && sortedTyres.length > 0) {
+      setActiveIndex(sortedTyres.length - 1);
     }
-  }, [tyres.length, activeIndex]);
+  }, [sortedTyres.length, activeIndex]);
 
-  const scrollToIndex = useCallback((index: number, behavior: ScrollBehavior = 'smooth') => {
-    const container = scrollerRef.current;
-    const target = itemRefs.current[index];
-    if (!container || !target) return;
-    const containerCenter = container.clientWidth / 2;
-    const targetCenter = target.offsetLeft + target.offsetWidth / 2;
-    const nextLeft = Math.max(0, targetCenter - containerCenter);
-    container.scrollTo({ left: nextLeft, behavior });
-    setActiveIndex(index);
+  const focusedTyre = useMemo<SavedTyreOption | null>(() => {
+    if (!focusedAxle || !focusedPurchase) return null;
+    const targetBrand = focusedPurchase.brandModel.trim().toLowerCase();
+    const targetTokens = targetBrand.split(/\s+/).filter(Boolean);
+    const isBrandMatch = (candidate: SavedTyreOption) => {
+      const b = candidate.brandModel.trim().toLowerCase();
+      return (
+        b === targetBrand ||
+        b.includes(targetBrand) ||
+        targetBrand.includes(b) ||
+        (targetTokens[0] ? b.includes(targetTokens[0]) : false)
+      );
+    };
+    const exactAxleMatch = sortedTyres.find(
+      (t) => t.axle === focusedAxle && isBrandMatch(t)
+    );
+    if (exactAxleMatch) return exactAxleMatch;
+    const anyAxleMatch = sortedTyres.find(isBrandMatch);
+    if (anyAxleMatch) return anyAxleMatch;
+
+    const perTyre =
+      focusedPurchase.corners.length > 0
+        ? Math.round((focusedPurchase.totalCost / focusedPurchase.corners.length) * 100) / 100
+        : focusedPurchase.totalCost;
+    return {
+      id: `focused-${focusedPurchase.id}`,
+      brandModel: focusedPurchase.brandModel,
+      price: perTyre,
+      axle: focusedAxle,
+      tyreSize: focusedPurchase.tyreSize,
+      wheelImageKey: car.bodyStyle === 'suv' ? 'all-terrain' : 'sport-5spoke',
+    };
+  }, [focusedAxle, focusedPurchase, sortedTyres, car.bodyStyle]);
+
+  useEffect(() => {
+    activeIndexRef.current = activeIndex;
+  }, [activeIndex]);
+
+  const releaseProgrammaticLock = useCallback(() => {
+    isProgrammaticScrollRef.current = false;
+    if (programmaticTimerRef.current !== null) {
+      window.clearTimeout(programmaticTimerRef.current);
+      programmaticTimerRef.current = null;
+    }
+    if (scrollerRef.current) {
+      scrollerRef.current.style.scrollSnapType = '';
+    }
   }, []);
 
+  const scrollToIndex = useCallback(
+    (index: number, behavior: ScrollBehavior = 'smooth') => {
+      const container = scrollerRef.current;
+      const target = itemRefs.current[index];
+      setActiveIndex(index);
+      if (!container || !target) return;
+
+      const containerCenter = container.clientWidth / 2;
+      const targetCenter = target.offsetLeft + target.offsetWidth / 2;
+      const nextLeft = Math.max(0, targetCenter - containerCenter);
+
+      if (programmaticTimerRef.current !== null) {
+        window.clearTimeout(programmaticTimerRef.current);
+      }
+
+      if (behavior === 'smooth') {
+        isProgrammaticScrollRef.current = true;
+        container.style.scrollSnapType = 'none';
+        container.scrollTo({ left: nextLeft, behavior: 'smooth' });
+        programmaticTimerRef.current = window.setTimeout(() => {
+          isProgrammaticScrollRef.current = false;
+          if (scrollerRef.current) {
+            scrollerRef.current.style.scrollSnapType = '';
+          }
+          programmaticTimerRef.current = null;
+        }, 420);
+      } else {
+        isProgrammaticScrollRef.current = false;
+        container.style.scrollSnapType = '';
+        container.scrollTo({ left: nextLeft, behavior: 'auto' });
+      }
+    },
+    []
+  );
+
   const handleScroll = () => {
+    if (isProgrammaticScrollRef.current) return;
     if (scrollRafRef.current !== null) {
       cancelAnimationFrame(scrollRafRef.current);
     }
     scrollRafRef.current = requestAnimationFrame(() => {
+      if (isProgrammaticScrollRef.current) return;
       const container = scrollerRef.current;
-      if (!container || tyres.length === 0) return;
+      if (!container || sortedTyres.length === 0) return;
       const centerX = container.scrollLeft + container.clientWidth / 2;
       let closestIdx = 0;
       let closestDist = Number.POSITIVE_INFINITY;
-      tyres.forEach((_, idx) => {
+      sortedTyres.forEach((_, idx) => {
         const el = itemRefs.current[idx];
         if (!el) return;
         const elCenter = el.offsetLeft + el.offsetWidth / 2;
@@ -124,9 +314,24 @@ export function SavedTyresCarousel({
   };
 
   useEffect(() => {
+    const wasFocused = prevFocusedAxleRef.current !== null;
+    prevFocusedAxleRef.current = focusedAxle;
+    if (wasFocused && !focusedAxle && activeIndexRef.current > 0) {
+      const idx = activeIndexRef.current;
+      const t = window.setTimeout(() => {
+        scrollToIndex(idx, 'auto');
+      }, 20);
+      return () => window.clearTimeout(t);
+    }
+  }, [focusedAxle, scrollToIndex]);
+
+  useEffect(() => {
     return () => {
       if (scrollRafRef.current !== null) {
         cancelAnimationFrame(scrollRafRef.current);
+      }
+      if (programmaticTimerRef.current !== null) {
+        window.clearTimeout(programmaticTimerRef.current);
       }
     };
   }, []);
@@ -138,6 +343,8 @@ export function SavedTyresCarousel({
     setAxle('Front');
     setTyreSize(car.defaultSizes.front);
     setWheelImageKey(car.bodyStyle === 'suv' ? 'all-terrain' : 'sport-5spoke');
+    setImageFileName(undefined);
+    setImageUrl(undefined);
     setNotes('');
     setFormError(null);
     setModalOpen(true);
@@ -150,9 +357,35 @@ export function SavedTyresCarousel({
     setAxle(item.axle);
     setTyreSize(item.tyreSize);
     setWheelImageKey(item.wheelImageKey);
+    setImageFileName(item.imageFileName);
+    setImageUrl(item.imageUrl);
     setNotes(item.notes ?? '');
     setFormError(null);
     setModalOpen(true);
+  };
+
+  const handlePngUpload = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setUploadingPng(true);
+    setFormError(null);
+    try {
+      const targetName = buildCanonicalTyreImageFileName(
+        car.id,
+        axle,
+        brandModel || file.name.replace(/\.[^.]+$/, '')
+      );
+      const uploadedUrl = await uploadCustomTyrePngToFirebaseStorage(targetName, file);
+      if (!uploadedUrl) {
+        setFormError('Firebase Storage upload is not permitted yet for this bucket.');
+        return;
+      }
+      setImageFileName(targetName);
+      setImageUrl(uploadedUrl);
+    } finally {
+      setUploadingPng(false);
+    }
   };
 
   const handleAxleChange = (nextAxle: TyreAxle) => {
@@ -177,6 +410,8 @@ export function SavedTyresCarousel({
       axle,
       tyreSize: tyreSize.trim() || (axle === 'Front' ? car.defaultSizes.front : car.defaultSizes.rear),
       wheelImageKey,
+      ...(imageFileName ? { imageFileName } : {}),
+      ...(imageUrl ? { imageUrl } : {}),
       notes: notes.trim() || undefined,
     };
 
@@ -184,9 +419,13 @@ export function SavedTyresCarousel({
       if (editingTyre) {
         await onUpdateTyre(editingTyre.id, payload);
       } else {
+        const targetIndex =
+          payload.axle === 'Front'
+            ? sortedTyres.filter((item) => item.axle === 'Front').length
+            : sortedTyres.length;
         await onAddTyre(payload);
         setTimeout(() => {
-          scrollToIndex(tyres.length, 'smooth');
+          scrollToIndex(targetIndex, 'smooth');
         }, 80);
       }
       setModalOpen(false);
@@ -221,7 +460,9 @@ export function SavedTyresCarousel({
     }
   };
 
-  const activeTyre = tyres[activeIndex] ?? tyres[0] ?? null;
+  const activeTyre = focusedAxle
+    ? focusedTyre
+    : sortedTyres[activeIndex] ?? sortedTyres[0] ?? null;
 
   return (
     <>
@@ -233,7 +474,103 @@ export function SavedTyresCarousel({
         aria-label="Saved tyre options"
         className="w-full my-auto py-2 flex flex-col items-center justify-center"
       >
-        {tyres.length === 0 ? (
+        {focusedAxle && !focusedTyre ? (
+          <div className="px-6 py-8 flex flex-col items-center text-center">
+            <button
+              type="button"
+              data-focus-interactive="true"
+              onClick={() => onAddPurchaseForAxle?.(focusedAxle)}
+              aria-label={`Add tyre for ${focusedAxle} axle`}
+              className="w-16 h-16 rounded-full bg-[#111315] text-white hover:bg-black/85 active:scale-[0.96] shadow-[0_6px_18px_rgba(17,19,21,0.16)] flex items-center justify-center transition-all cursor-pointer"
+            >
+              <Plus className="w-6 h-6" />
+            </button>
+            <p className="mt-3.5 font-display text-base font-semibold text-[#111315]">
+              No tyre selected
+            </p>
+            <p className="mt-0.5 text-xs text-[#5E646A]">
+              Tap + to add tyres for the {focusedAxle.toLowerCase()} set
+            </p>
+          </div>
+        ) : focusedAxle && focusedTyre ? (
+          <div className="w-full flex flex-col items-center justify-center">
+            {/* Static face-on view of the selected wheel & tyre */}
+            <div className="w-full py-2 flex items-center justify-center">
+              <motion.div
+                key={`focus-wheel-${focusedAxle}-${focusedTyre.id}`}
+                initial={{ opacity: 0, scale: 0.88 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+                className="w-[164px] h-[164px] sm:w-[184px] sm:h-[184px] flex items-center justify-center"
+              >
+                {failedImages[`faceon-${focusedTyre.id}`] ? (
+                  <div className="w-full h-full rounded-full bg-[#E5E7E3] flex items-center justify-center text-xs font-medium text-[#5E646A]">
+                    Tyre
+                  </div>
+                ) : (
+                  <img
+                    src={resolveFaceOnTyreImage(car.id, focusedTyre)}
+                    alt={`${focusedTyre.brandModel} face-on wheel and tyre`}
+                    referrerPolicy="no-referrer"
+                    draggable={false}
+                    onError={() =>
+                      setFailedImages((prev) => ({
+                        ...prev,
+                        [`faceon-${focusedTyre.id}`]: true,
+                      }))
+                    }
+                    className="w-full h-full object-contain select-none pointer-events-none"
+                  />
+                )}
+              </motion.div>
+            </div>
+
+            {/* Focused Tyre Info + Clickable Garage Location (jumps to Contacts) & Purchase Date */}
+            <motion.div
+              key={`focus-meta-${focusedAxle}-${focusedTyre.id}`}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.25 }}
+              className="mt-2 px-6 text-center"
+            >
+              <p className="font-display text-2xl sm:text-[26px] font-bold tracking-tight tabular-nums text-[#111315] leading-none">
+                {formatPriceRM(focusedTyre.price)}
+              </p>
+              <h3 className="mt-1 font-display text-[15px] sm:text-base font-medium text-[#111315] leading-snug text-balance">
+                {focusedTyre.brandModel}
+              </h3>
+              <p className="mt-0.5 flex items-center justify-center gap-1.5 text-xs text-[#5E646A] tabular-nums">
+                <span className="font-semibold text-[#111315]">
+                  {focusedTyre.axle}
+                </span>
+                <span aria-hidden="true" className="text-[#9AA0A6]">
+                  ·
+                </span>
+                <span className="font-mono">{focusedTyre.tyreSize}</span>
+              </p>
+
+              {focusedPurchase && (
+                <div className="mt-3 pt-2.5 border-t border-black/8 flex flex-col items-center gap-1.5 max-w-xs mx-auto">
+                  <button
+                    type="button"
+                    data-focus-interactive="true"
+                    onClick={() =>
+                      onNavigateToContact?.(focusedPurchase.vendor, focusedContact)
+                    }
+                    className="inline-flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium text-[#111315] hover:bg-black/[0.05] hover:text-[#FF5A1F] active:scale-[0.98] transition-all cursor-pointer"
+                  >
+                    <Store className="w-3.5 h-3.5 shrink-0 text-[#5E646A]" />
+                    <span>{focusedPurchase.vendor}</span>
+                  </button>
+                  <p className="inline-flex items-center justify-center gap-1.5 text-[11px] text-[#5E646A] tabular-nums">
+                    <Calendar className="w-3 h-3 shrink-0 text-[#8C9298]" />
+                    <span>Purchased {formatDisplayDate(focusedPurchase.date)}</span>
+                  </p>
+                </div>
+              )}
+            </motion.div>
+          </div>
+        ) : sortedTyres.length === 0 ? (
           <div className="px-6 py-6 flex flex-col items-center text-center">
             <button
               type="button"
@@ -248,176 +585,189 @@ export function SavedTyresCarousel({
             </p>
           </div>
         ) : (
-          <div className="w-full relative">
-            {/* Horizontal side-scrolling wheel showcase */}
-            <div className="relative w-full flex items-center">
-              {activeIndex > 0 && (
-                <button
-                  type="button"
-                  onClick={() => scrollToIndex(activeIndex - 1)}
-                  aria-label="Previous tyre"
-                  className="hidden sm:flex absolute left-4 z-10 w-10 h-10 rounded-full bg-white/80 hover:bg-white border border-black/8 shadow-[0_2px_10px_rgba(17,19,21,0.06)] items-center justify-center text-[#111315] transition-all cursor-pointer"
+          <AnimatePresence mode="wait">
+            <motion.div
+              key="carousel-normal"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.16 }}
+              className="w-full relative"
+            >
+              {/* Horizontal side-scrolling wheel showcase */}
+              <div className="relative w-full flex items-center">
+                {activeIndex > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => scrollToIndex(activeIndex - 1)}
+                    aria-label="Previous tyre"
+                    className="hidden sm:flex absolute left-4 z-10 w-10 h-10 rounded-full bg-white/80 hover:bg-white border border-black/8 shadow-[0_2px_10px_rgba(17,19,21,0.06)] items-center justify-center text-[#111315] transition-all cursor-pointer"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                )}
+
+                <div
+                  ref={scrollerRef}
+                  onScroll={handleScroll}
+                  onTouchStart={releaseProgrammaticLock}
+                  onWheel={releaseProgrammaticLock}
+                  className="w-full overflow-x-auto snap-x snap-mandatory flex items-center px-[calc(50%-72px)] sm:px-[calc(50%-82px)] py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                 >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
-              )}
+                  {sortedTyres.map((item, idx) => {
+                    const isActive = idx === activeIndex;
+                    const imgSrc = resolveTyreImage(car.id, item);
+                    const imgBroken = failedImages[item.id];
 
-              <div
-                ref={scrollerRef}
-                onScroll={handleScroll}
-                className="w-full overflow-x-auto snap-x snap-mandatory flex items-center px-[calc(50%-72px)] sm:px-[calc(50%-82px)] py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-              >
-                {tyres.map((item, idx) => {
+                    return (
+                      <button
+                        key={item.id}
+                        ref={(el) => {
+                          itemRefs.current[idx] = el;
+                        }}
+                        type="button"
+                        onClick={() => {
+                          if (isActive) {
+                            openEditModal(item);
+                          } else {
+                            scrollToIndex(idx);
+                          }
+                        }}
+                        aria-label={
+                          isActive
+                            ? `Edit ${item.brandModel}`
+                            : `Select ${item.brandModel}`
+                        }
+                        className="snap-center shrink-0 w-[144px] sm:w-[164px] flex items-center justify-center focus:outline-none cursor-pointer"
+                      >
+                        <div
+                          className={`w-[136px] h-[136px] sm:w-[152px] sm:h-[152px] flex items-center justify-center transition-all duration-200 ${
+                            isActive
+                              ? 'scale-100 opacity-100'
+                              : 'scale-[0.74] opacity-45 hover:opacity-75'
+                          }`}
+                        >
+                          {imgBroken ? (
+                            <div className="w-full h-full rounded-full bg-[#E5E7E3] flex items-center justify-center text-xs font-medium text-[#5E646A]">
+                              Tyre
+                            </div>
+                          ) : (
+                            <img
+                              src={imgSrc}
+                              alt={`${item.brandModel} wheel and tyre`}
+                              referrerPolicy="no-referrer"
+                              onError={() =>
+                                setFailedImages((prev) => ({ ...prev, [item.id]: true }))
+                              }
+                              className="w-full h-full object-contain select-none pointer-events-none"
+                              draggable={false}
+                            />
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {activeIndex < sortedTyres.length - 1 && (
+                  <button
+                    type="button"
+                    onClick={() => scrollToIndex(activeIndex + 1)}
+                    aria-label="Next tyre"
+                    className="hidden sm:flex absolute right-4 z-10 w-10 h-10 rounded-full bg-white/80 hover:bg-white border border-black/8 shadow-[0_2px_10px_rgba(17,19,21,0.06)] items-center justify-center text-[#111315] transition-all cursor-pointer"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+
+              {/* Pagination dots */}
+              <div className="mt-1 flex items-center justify-center gap-1.5">
+                {sortedTyres.map((item, idx) => {
                   const isActive = idx === activeIndex;
-                  const imgSrc = WHEEL_IMAGE_MAP[item.wheelImageKey] ?? sport5SpokeImg;
-                  const imgBroken = failedImages[item.id];
-
                   return (
                     <button
                       key={item.id}
-                      ref={(el) => {
-                        itemRefs.current[idx] = el;
-                      }}
                       type="button"
-                      onClick={() => {
-                        if (isActive) {
-                          openEditModal(item);
-                        } else {
-                          scrollToIndex(idx);
-                        }
-                      }}
-                      aria-label={
-                        isActive
-                          ? `Edit ${item.brandModel}`
-                          : `Select ${item.brandModel}`
-                      }
-                      className="snap-center shrink-0 w-[144px] sm:w-[164px] flex items-center justify-center focus:outline-none cursor-pointer"
+                      onClick={() => scrollToIndex(idx)}
+                      aria-label={`View ${item.brandModel}`}
+                      className="p-1 flex items-center justify-center cursor-pointer"
                     >
-                      <div
-                        className={`w-[136px] h-[136px] sm:w-[152px] sm:h-[152px] rounded-full p-2 flex items-center justify-center transition-all duration-200 ${
+                      <span
+                        className={`block rounded-full transition-all duration-200 ${
                           isActive
-                            ? 'border-[3px] border-[#111315] bg-white/85 shadow-[0_12px_28px_-8px_rgba(17,19,21,0.16)] scale-100 opacity-100'
-                            : 'border-[3px] border-transparent bg-transparent scale-[0.76] opacity-55 hover:opacity-80'
+                            ? 'w-2 h-2 bg-[#111315]'
+                            : 'w-1.5 h-1.5 bg-[#111315]/22 hover:bg-[#111315]/45'
                         }`}
-                      >
-                        {imgBroken ? (
-                          <div className="w-full h-full rounded-full bg-[#E5E7E3] flex items-center justify-center text-xs font-medium text-[#5E646A]">
-                            Tyre
-                          </div>
-                        ) : (
-                          <img
-                            src={imgSrc}
-                            alt={`${item.brandModel} wheel and tyre`}
-                            referrerPolicy="no-referrer"
-                            onError={() =>
-                              setFailedImages((prev) => ({ ...prev, [item.id]: true }))
-                            }
-                            className="w-full h-full rounded-full object-contain mix-blend-multiply select-none pointer-events-none"
-                            draggable={false}
-                          />
-                        )}
-                      </div>
+                      />
                     </button>
                   );
                 })}
               </div>
 
-              {activeIndex < tyres.length - 1 && (
-                <button
-                  type="button"
-                  onClick={() => scrollToIndex(activeIndex + 1)}
-                  aria-label="Next tyre"
-                  className="hidden sm:flex absolute right-4 z-10 w-10 h-10 rounded-full bg-white/80 hover:bg-white border border-black/8 shadow-[0_2px_10px_rgba(17,19,21,0.06)] items-center justify-center text-[#111315] transition-all cursor-pointer"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-
-            {/* Pagination dots */}
-            <div className="mt-1 flex items-center justify-center gap-1.5">
-              {tyres.map((item, idx) => {
-                const isActive = idx === activeIndex;
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => scrollToIndex(idx)}
-                    aria-label={`View ${item.brandModel}`}
-                    className="p-1 flex items-center justify-center cursor-pointer"
-                  >
-                    <span
-                      className={`block rounded-full transition-all duration-200 ${
-                        isActive
-                          ? 'w-2 h-2 bg-[#111315]'
-                          : 'w-1.5 h-1.5 bg-[#111315]/22 hover:bg-[#111315]/45'
-                      }`}
-                    />
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Active Tyre Price, Name, Axle & Size */}
-            {activeTyre && (
-              <div className="mt-1.5 px-6 text-center">
-                <p className="font-display text-2xl sm:text-[26px] font-bold tracking-tight tabular-nums text-[#111315] leading-none">
-                  {formatPriceRM(activeTyre.price)}
-                </p>
-                <h3 className="mt-1 font-display text-[15px] sm:text-base font-medium text-[#111315] leading-snug text-balance">
-                  {activeTyre.brandModel}
-                </h3>
-                <p className="mt-0.5 flex items-center justify-center gap-1.5 text-xs text-[#5E646A] tabular-nums">
-                  <span className="font-semibold text-[#111315]">
-                    {activeTyre.axle}
-                  </span>
-                  <span aria-hidden="true" className="text-[#9AA0A6]">
-                    ·
-                  </span>
-                  <span className="font-mono">{activeTyre.tyreSize}</span>
-                </p>
-                {activeTyre.notes && (
-                  <p className="mt-0.5 text-[11px] text-[#6B7075] truncate max-w-xs mx-auto">
-                    {activeTyre.notes}
+              {/* Active Tyre Price, Name, Axle & Size */}
+              {activeTyre && (
+                <div className="mt-1.5 px-6 text-center">
+                  <p className="font-display text-2xl sm:text-[26px] font-bold tracking-tight tabular-nums text-[#111315] leading-none">
+                    {formatPriceRM(activeTyre.price)}
                   </p>
-                )}
+                  <h3 className="mt-1 font-display text-[15px] sm:text-base font-medium text-[#111315] leading-snug text-balance">
+                    {activeTyre.brandModel}
+                  </h3>
+                  <p className="mt-0.5 flex items-center justify-center gap-1.5 text-xs text-[#5E646A] tabular-nums">
+                    <span className="font-semibold text-[#111315]">
+                      {activeTyre.axle}
+                    </span>
+                    <span aria-hidden="true" className="text-[#9AA0A6]">
+                      ·
+                    </span>
+                    <span className="font-mono">{activeTyre.tyreSize}</span>
+                  </p>
+                  {activeTyre.notes && (
+                    <p className="mt-0.5 text-[11px] text-[#6B7075] truncate max-w-xs mx-auto">
+                      {activeTyre.notes}
+                    </p>
+                  )}
 
-                <div className="mt-1.5 flex items-center justify-center gap-4 text-xs text-[#5E646A]">
-                  <button
-                    type="button"
-                    onClick={openAddModal}
-                    className="min-h-[36px] px-2 inline-flex items-center gap-1 font-medium text-[#111315] hover:text-[#FF5A1F] transition-colors cursor-pointer"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Save tyre</span>
-                  </button>
-                  <span aria-hidden="true" className="text-[#C5C8C4]">
-                    |
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => openEditModal(activeTyre)}
-                    className="min-h-[36px] px-2 inline-flex items-center gap-1 font-medium text-[#5E646A] hover:text-[#111315] transition-colors cursor-pointer"
-                  >
-                    <Pencil className="w-3 h-3" />
-                    <span>Edit</span>
-                  </button>
+                  <div className="mt-1.5 flex items-center justify-center gap-4 text-xs text-[#5E646A]">
+                    <button
+                      type="button"
+                      onClick={openAddModal}
+                      className="min-h-[36px] px-2 inline-flex items-center gap-1 font-medium text-[#111315] hover:text-[#FF5A1F] transition-colors cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Save tyre</span>
+                    </button>
+                    <span aria-hidden="true" className="text-[#C5C8C4]">
+                      |
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => openEditModal(activeTyre)}
+                      className="min-h-[36px] px-2 inline-flex items-center gap-1 font-medium text-[#5E646A] hover:text-[#111315] transition-colors cursor-pointer"
+                    >
+                      <Pencil className="w-3 h-3" />
+                      <span>Edit</span>
+                    </button>
+                  </div>
+
+                  {rulesPending && (
+                    <p className="mt-1 text-[11px] text-[#991B1B]">
+                      Publish the savedTyres Firestore rule to sync edits.
+                    </p>
+                  )}
                 </div>
-
-                {rulesPending && (
-                  <p className="mt-1 text-[11px] text-[#991B1B]">
-                    Publish the savedTyres Firestore rule to sync edits.
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
+              )}
+            </motion.div>
+          </AnimatePresence>
         )}
       </motion.section>
 
-      {/* Add / Edit Saved Tyre Option Modal */}
-      {modalOpen && (
-        <div
+      {/* Add / Edit Saved Tyre Option Modal (portaled above BottomNav) */}
+      {modalOpen &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div
           className="fixed inset-0 z-50 bg-black/35 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4"
           onClick={() => setModalOpen(false)}
         >
@@ -448,17 +798,44 @@ export function SavedTyresCarousel({
             <form onSubmit={handleSubmit} className="space-y-3.5">
               {/* Wheel Image Style Picker */}
               <div>
-                <label className="block text-xs font-medium text-[#5E646A] mb-1.5">
-                  Wheel style
-                </label>
+                <div className="flex items-center justify-between gap-2 mb-1.5">
+                  <label className="block text-xs font-medium text-[#5E646A]">
+                    Wheel style
+                  </label>
+                  <button
+                    type="button"
+                    disabled={uploadingPng}
+                    onClick={() => fileInputRef.current?.click()}
+                    className="inline-flex items-center gap-1 text-[11px] font-medium text-[#111315] hover:text-[#FF5A1F] transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    <Upload className="w-3 h-3" />
+                    <span>{uploadingPng ? 'Uploading...' : imageFileName ? 'Replace PNG' : 'Upload PNG'}</span>
+                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/png"
+                    onChange={handlePngUpload}
+                    className="hidden"
+                  />
+                </div>
+                {imageFileName && (
+                  <p className="mb-2 text-[11px] font-mono text-[#5E646A] truncate">
+                    Linked cutout: {imageFileName}
+                  </p>
+                )}
                 <div className="grid grid-cols-4 gap-2">
                   {WHEEL_STYLE_OPTIONS.map((opt) => {
-                    const selected = wheelImageKey === opt.key;
+                    const selected = !imageFileName && wheelImageKey === opt.key;
                     return (
                       <button
                         key={opt.key}
                         type="button"
-                        onClick={() => setWheelImageKey(opt.key)}
+                        onClick={() => {
+                          setWheelImageKey(opt.key);
+                          setImageFileName(undefined);
+                          setImageUrl(undefined);
+                        }}
                         className={`p-1.5 rounded-2xl border flex flex-col items-center gap-1 transition-all cursor-pointer ${
                           selected
                             ? 'border-[#111315] bg-[#F3F4F2] ring-1 ring-[#111315]'
@@ -469,7 +846,7 @@ export function SavedTyresCarousel({
                           src={opt.src}
                           alt={opt.label}
                           referrerPolicy="no-referrer"
-                          className="w-11 h-11 rounded-full object-contain mix-blend-multiply"
+                          className="w-11 h-11 object-contain"
                         />
                         <span className="text-[10px] font-medium text-[#111315] whitespace-nowrap">
                           {opt.label}
@@ -511,14 +888,20 @@ export function SavedTyresCarousel({
                   <label className="block text-xs font-medium text-[#5E646A] mb-1">
                     Tyre size
                   </label>
-                  <input
-                    type="text"
+                  <select
                     required
                     value={tyreSize}
                     onChange={(e) => setTyreSize(e.target.value)}
-                    placeholder="225/40 R18 92Y"
                     className="w-full min-h-[42px] px-3 py-2 rounded-xl bg-[#F3F4F2] border border-black/8 font-mono text-xs text-[#111315] focus:outline-none focus:ring-2 focus:ring-[#111315]"
-                  />
+                  >
+                    {Array.from(
+                      new Set([...getCarTyreSizingOptions(car), ...(tyreSize ? [tyreSize] : [])])
+                    ).map((size) => (
+                      <option key={size} value={size}>
+                        {size}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-[#5E646A] mb-1">
@@ -600,7 +983,8 @@ export function SavedTyresCarousel({
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );

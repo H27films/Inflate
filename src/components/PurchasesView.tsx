@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent, type ClipboardEvent, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { ArrowLeft, Plus, Trash2, X, Store, Ruler, Globe, Phone, ClipboardPaste, Check, ChevronDown, Disc, Upload } from 'lucide-react';
 import {
   CarProfile,
@@ -966,12 +966,15 @@ export function PurchasesView({
     setShowContactModal(false);
   };
 
+  const prefersReduced = useReducedMotion();
+  const isFocused = focusedAxle !== null;
+
   return (
     <>
       <motion.div
-        initial={{ opacity: 0, y: 10 }}
+        initial={prefersReduced ? false : { opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.22 }}
+        transition={{ duration: prefersReduced ? 0.12 : 0.22 }}
         className="flex-1 w-full max-w-5xl lg:max-w-[540px] mx-auto flex flex-col justify-between pt-3 pb-0"
       >
         <div className="px-4 sm:px-6 lg:px-4 space-y-3">
@@ -1002,7 +1005,7 @@ export function PurchasesView({
                   scale: focusedAxle === 'Back' ? 0.96 : 1,
                 }}
                 transition={{
-                  duration: 0.34,
+                  duration: prefersReduced ? 0.14 : 0.42,
                   ease: [0.22, 1, 0.36, 1],
                 }}
                 className={`relative shrink-0 overflow-visible ${
@@ -1015,7 +1018,7 @@ export function PurchasesView({
                   data-focus-interactive="true"
                   onClick={() => handleToggleAxleFocus('Front')}
                   aria-pressed={focusedAxle === 'Front'}
-                  className={`relative z-10 w-full overflow-hidden text-left rounded-2xl bg-[#16191D] text-white cursor-pointer transition-all hover:bg-[#1E2228] focus:outline-none ${
+                  className={`relative z-10 w-full overflow-hidden text-left rounded-2xl bg-[#16191D] text-white cursor-pointer transition-[padding,background-color,box-shadow] duration-[420ms] ease-[cubic-bezier(0.22,1,0.36,1)] hover:bg-[#1E2228] focus:outline-none ${
                     focusedAxle === 'Front'
                       ? 'shadow-[0_6px_18px_rgba(17,19,21,0.2)]'
                       : 'shadow-[0_2px_8px_rgba(17,19,21,0.08)]'
@@ -1095,7 +1098,7 @@ export function PurchasesView({
                   scale: focusedAxle === 'Front' ? 0.96 : 1,
                 }}
                 transition={{
-                  duration: 0.34,
+                  duration: prefersReduced ? 0.14 : 0.42,
                   ease: [0.22, 1, 0.36, 1],
                 }}
                 className={`relative shrink-0 overflow-visible ${
@@ -1108,7 +1111,7 @@ export function PurchasesView({
                   data-focus-interactive="true"
                   onClick={() => handleToggleAxleFocus('Back')}
                   aria-pressed={focusedAxle === 'Back'}
-                  className={`relative z-10 w-full overflow-hidden text-left rounded-2xl bg-[#16191D] text-white cursor-pointer transition-all hover:bg-[#1E2228] focus:outline-none ${
+                  className={`relative z-10 w-full overflow-hidden text-left rounded-2xl bg-[#16191D] text-white cursor-pointer transition-[padding,background-color,box-shadow] duration-[420ms] ease-[cubic-bezier(0.22,1,0.36,1)] hover:bg-[#1E2228] focus:outline-none ${
                     focusedAxle === 'Back'
                       ? 'shadow-[0_6px_18px_rgba(17,19,21,0.2)]'
                       : 'shadow-[0_2px_8px_rgba(17,19,21,0.08)]'
@@ -1201,17 +1204,32 @@ export function PurchasesView({
           )}
         </AnimatePresence>
 
-        {/* Bottom Stacked Drawers: Hidden smoothly while an axle is focused; Purchase log + Installation + Contacts */}
-        <AnimatePresence initial={false}>
-          {focusedAxle === null && (
-            <motion.div
-              key="bottom-stacked-drawers"
-              initial={{ opacity: 0, y: 24, height: 0 }}
-              animate={{ opacity: 1, y: 0, height: 'auto' }}
-              exit={{ opacity: 0, y: 20, height: 0 }}
-              transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-              className="mt-3 px-1.5 sm:px-3 overflow-hidden"
-            >
+        {/* Bottom Stacked Drawers: Smoothly slide downward and fade out while an axle is focused */}
+        <motion.div
+          initial={false}
+          animate={{
+            height: isFocused ? 0 : 'auto',
+          }}
+          transition={{
+            duration: prefersReduced ? 0.14 : 0.42,
+            ease: [0.22, 1, 0.36, 1],
+          }}
+          aria-hidden={isFocused}
+          className={`overflow-hidden ${isFocused ? 'pointer-events-none' : ''}`}
+        >
+          <motion.div
+            initial={false}
+            animate={{
+              y: isFocused ? (prefersReduced ? 0 : 88) : 0,
+              opacity: isFocused ? 0 : 1,
+            }}
+            transition={{
+              duration: prefersReduced ? 0.14 : isFocused ? 0.34 : 0.4,
+              delay: prefersReduced ? 0 : isFocused ? 0 : 0.04,
+              ease: [0.22, 1, 0.36, 1],
+            }}
+            className="pt-3 px-1.5 sm:px-3"
+          >
           {/* Purchase History Logs (Expanded by default, collapses down to stack above Installation by Tyre) */}
           <section
             className={`relative z-0 overflow-hidden transition-all duration-300 rounded-t-3xl rounded-b-none ring-1 ring-black/[0.05] ${
@@ -1670,9 +1688,8 @@ export function PurchasesView({
               )}
             </AnimatePresence>
           </section>
-            </motion.div>
-          )}
-        </AnimatePresence>
+          </motion.div>
+        </motion.div>
       </motion.div>
 
       {/* Add Modal: Drops down from top below header, portaled above BottomNav */}

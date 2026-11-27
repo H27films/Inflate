@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { Calendar, ChevronLeft, ChevronRight, Plus, Store, Trash2, Upload, X } from 'lucide-react';
 import {
   CarId,
@@ -597,32 +597,274 @@ export function SavedTyresCarousel({
     }
   };
 
+  const prefersReduced = useReducedMotion();
+  const isFocused = Boolean(focusedAxle);
   const activeTyre = focusedAxle
     ? focusedTyre
     : sortedTyres[activeIndex] ?? sortedTyres[0] ?? null;
 
+  const activeSplitItem =
+    focusedAxle && focusedSplitItems
+      ? focusedSplitItems[focusedSplitActiveIdx] ?? null
+      : null;
+
+  type DisplayState =
+    | {
+        mode: 'empty';
+        key: string;
+        emptyTitle: string | null;
+        emptySubtitle: string;
+      }
+    | {
+        mode: 'tyre';
+        price: number;
+        brandModel: string;
+        axleLabel: string;
+        tyreSize: string;
+        notes?: string;
+        purchaseVendor?: string;
+        purchaseContact?: TyreContact | null;
+        purchaseDate?: string;
+      };
+
+  const displayState: DisplayState = (() => {
+    if (focusedAxle && focusedSplitItems) {
+      const sidePositionLabel = `${focusedAxle} ${activeSplitItem?.side ?? 'Left'}`;
+      if (!activeSplitItem?.tyre || !activeSplitItem.purchase) {
+        return {
+          mode: 'empty',
+          key: `empty-split-${sidePositionLabel}`,
+          emptyTitle: 'No tyre selected',
+          emptySubtitle: `Tap + to add ${sidePositionLabel.toLowerCase()} tyre`,
+        };
+      }
+      return {
+        mode: 'tyre',
+        price: activeSplitItem.tyre.price,
+        brandModel: activeSplitItem.tyre.brandModel,
+        axleLabel: sidePositionLabel,
+        tyreSize: activeSplitItem.tyre.tyreSize,
+        purchaseVendor: activeSplitItem.purchase.vendor,
+        purchaseContact: activeSplitItem.contact,
+        purchaseDate: activeSplitItem.purchase.date,
+      };
+    }
+
+    if (focusedAxle && !focusedTyre) {
+      return {
+        mode: 'empty',
+        key: `empty-focus-${focusedAxle}`,
+        emptyTitle: 'No tyre selected',
+        emptySubtitle: `Tap + to add tyres for the ${focusedAxle.toLowerCase()} set`,
+      };
+    }
+
+    if (focusedAxle && focusedTyre) {
+      return {
+        mode: 'tyre',
+        price: focusedTyre.price,
+        brandModel: focusedTyre.brandModel,
+        axleLabel: focusedAxle,
+        tyreSize: focusedTyre.tyreSize,
+        purchaseVendor: focusedPurchase?.vendor,
+        purchaseContact: focusedContact,
+        purchaseDate: focusedPurchase?.date,
+      };
+    }
+
+    if (sortedTyres.length === 0 || !activeTyre) {
+      return {
+        mode: 'empty',
+        key: `empty-carousel-${car.id}`,
+        emptyTitle: null,
+        emptySubtitle: `Save tyre models & prices for ${car.displayTitle}`,
+      };
+    }
+
+    return {
+      mode: 'tyre',
+      price: activeTyre.price,
+      brandModel: activeTyre.brandModel,
+      axleLabel: activeTyre.axle,
+      tyreSize: activeTyre.tyreSize,
+      notes: activeTyre.notes,
+    };
+  })();
+
+  const summaryKey =
+    displayState.mode === 'empty'
+      ? displayState.key
+      : `${displayState.price}|${displayState.brandModel}|${displayState.axleLabel}|${displayState.tyreSize}`;
+
+  const showDotsRow =
+    (!isFocused && sortedTyres.length > 0) ||
+    Boolean(focusedAxle && focusedSplitItems);
+
+  const hasVendorFooter =
+    displayState.mode === 'tyre' &&
+    Boolean(displayState.purchaseVendor && displayState.purchaseDate);
+
   return (
     <>
       <motion.section
-        initial={{ opacity: 0, y: 8 }}
+        initial={prefersReduced ? false : { opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: 6 }}
-        transition={{ duration: 0.2 }}
+        exit={prefersReduced ? { opacity: 0 } : { opacity: 0, y: 6 }}
+        transition={{ duration: prefersReduced ? 0.12 : 0.22 }}
         aria-label="Saved tyre options"
         className="w-full my-auto py-2 flex flex-col items-center justify-center"
       >
-        <AnimatePresence mode="wait" initial={false}>
-          {focusedAxle && focusedSplitItems ? (
+        {/* Continuous Wheel Stage: cross-morphs between angled carousel and face-on wheel without unmounting */}
+        <div
+          className={`relative w-full flex items-center justify-center transition-[height] duration-[420ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${
+            isFocused
+              ? 'h-[180px] sm:h-[200px]'
+              : 'h-[152px] sm:h-[168px]'
+          }`}
+        >
+          {/* Overview Horizontal Carousel (kept mounted when tyres exist so scroll & active tyre persist) */}
+          {sortedTyres.length > 0 ? (
             <motion.div
-              key={`focus-split-${focusedAxle}`}
-              initial={{ opacity: 0, scale: 0.92, y: 10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.94, y: -8 }}
-              transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-              className="w-full relative flex flex-col items-center"
+              initial={false}
+              animate={{
+                opacity: isFocused ? 0 : 1,
+                scale: isFocused ? (prefersReduced ? 1 : 0.88) : 1,
+              }}
+              transition={{
+                duration: prefersReduced ? 0.14 : isFocused ? 0.28 : 0.38,
+                delay: prefersReduced ? 0 : isFocused ? 0 : 0.04,
+                ease: [0.22, 1, 0.36, 1],
+              }}
+              aria-hidden={isFocused}
+              className={`relative w-full h-full flex items-center ${
+                isFocused ? 'pointer-events-none' : ''
+              }`}
             >
-              {/* Horizontal Left / Right scroll showcase when sides differ */}
-              <div data-focus-interactive="true" className="relative w-full flex items-center">
+              {activeIndex > 0 && (
+                <button
+                  type="button"
+                  tabIndex={isFocused ? -1 : 0}
+                  onClick={() => scrollToIndex(activeIndex - 1)}
+                  aria-label="Previous tyre"
+                  className="hidden sm:flex absolute left-4 z-10 w-10 h-10 rounded-full bg-white/80 hover:bg-white border border-black/8 shadow-[0_2px_10px_rgba(17,19,21,0.06)] items-center justify-center text-[#111315] transition-all cursor-pointer"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+              )}
+
+              <div
+                ref={scrollerRef}
+                onScroll={handleScroll}
+                onTouchStart={releaseProgrammaticLock}
+                onWheel={releaseProgrammaticLock}
+                className="w-full overflow-x-auto snap-x snap-mandatory flex items-center px-[calc(50%-72px)] sm:px-[calc(50%-82px)] py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              >
+                {sortedTyres.map((item, idx) => {
+                  const isActive = idx === activeIndex;
+                  const imgSrc = resolveTyreImage(car.id, item);
+                  const imgBroken = failedImages[item.id];
+
+                  return (
+                    <button
+                      key={item.id}
+                      ref={(el) => {
+                        itemRefs.current[idx] = el;
+                      }}
+                      type="button"
+                      tabIndex={isFocused ? -1 : 0}
+                      onClick={() => {
+                        if (isFocused) return;
+                        if (isActive) {
+                          openEditModal(item);
+                        } else {
+                          scrollToIndex(idx);
+                        }
+                      }}
+                      aria-label={
+                        isActive
+                          ? `Edit ${item.brandModel}`
+                          : `Select ${item.brandModel}`
+                      }
+                      className="snap-center shrink-0 w-[144px] sm:w-[164px] flex items-center justify-center focus:outline-none cursor-pointer"
+                    >
+                      <div
+                        className={`w-[136px] h-[136px] sm:w-[152px] sm:h-[152px] flex items-center justify-center transition-all duration-200 ${
+                          isActive
+                            ? 'scale-100 opacity-100'
+                            : 'scale-[0.74] opacity-45 hover:opacity-75'
+                        }`}
+                      >
+                        {imgBroken ? (
+                          <div className="w-full h-full rounded-full bg-[#E5E7E3] flex items-center justify-center text-xs font-medium text-[#5E646A]">
+                            Tyre
+                          </div>
+                        ) : (
+                          <img
+                            src={imgSrc}
+                            alt={`${item.brandModel} wheel and tyre`}
+                            referrerPolicy="no-referrer"
+                            onError={() =>
+                              setFailedImages((prev) => ({ ...prev, [item.id]: true }))
+                            }
+                            className="w-full h-full object-contain select-none pointer-events-none"
+                            draggable={false}
+                          />
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {activeIndex < sortedTyres.length - 1 && (
+                <button
+                  type="button"
+                  tabIndex={isFocused ? -1 : 0}
+                  onClick={() => scrollToIndex(activeIndex + 1)}
+                  aria-label="Next tyre"
+                  className="hidden sm:flex absolute right-4 z-10 w-10 h-10 rounded-full bg-white/80 hover:bg-white border border-black/8 shadow-[0_2px_10px_rgba(17,19,21,0.06)] items-center justify-center text-[#111315] transition-all cursor-pointer"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              )}
+            </motion.div>
+          ) : null}
+
+          {/* Empty Carousel Circle (when 0 tyres saved and not focused) */}
+          <AnimatePresence initial={false}>
+            {!isFocused && sortedTyres.length === 0 && (
+              <motion.div
+                key="carousel-empty-circle"
+                initial={prefersReduced ? { opacity: 0 } : { opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={prefersReduced ? { opacity: 0 } : { opacity: 0, scale: 0.9 }}
+                transition={{ duration: prefersReduced ? 0.12 : 0.28, ease: [0.22, 1, 0.36, 1] }}
+                className="absolute inset-0 flex items-center justify-center"
+              >
+                <button
+                  type="button"
+                  onClick={openAddModal}
+                  className="w-[136px] h-[136px] rounded-full border-2 border-dashed border-[#111315]/25 bg-white/55 hover:bg-white/85 flex flex-col items-center justify-center gap-1.5 text-[#111315] transition-colors cursor-pointer"
+                >
+                  <Plus className="w-6 h-6" />
+                  <span className="text-xs font-medium">Add tyre</span>
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Focused Overlay Wheel(s) — sync AnimatePresence so it cross-fades directly over the carousel wheel */}
+          <AnimatePresence initial={false}>
+            {focusedAxle && focusedSplitItems ? (
+              <motion.div
+                key={`focus-split-${focusedAxle}`}
+                initial={prefersReduced ? { opacity: 0 } : { opacity: 0, scale: 0.86 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={prefersReduced ? { opacity: 0 } : { opacity: 0, scale: 0.88 }}
+                transition={{ duration: prefersReduced ? 0.14 : 0.4, ease: [0.22, 1, 0.36, 1] }}
+                data-focus-interactive="true"
+                className="absolute inset-0 flex items-center justify-center"
+              >
                 {focusedSplitActiveIdx > 0 && (
                   <button
                     type="button"
@@ -740,171 +982,47 @@ export function SavedTyresCarousel({
                     <ChevronRight className="w-4 h-4" />
                   </button>
                 )}
-              </div>
-
-              {/* Left / Right selector dots */}
-              <div
-                data-focus-interactive="true"
-                className="mt-1 flex items-center justify-center gap-2.5"
+              </motion.div>
+            ) : focusedAxle && !focusedTyre ? (
+              <motion.div
+                key={`focus-empty-${focusedAxle}`}
+                initial={prefersReduced ? { opacity: 0 } : { opacity: 0, scale: 0.86 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={prefersReduced ? { opacity: 0 } : { opacity: 0, scale: 0.88 }}
+                transition={{ duration: prefersReduced ? 0.14 : 0.34, ease: [0.22, 1, 0.36, 1] }}
+                className="absolute inset-0 flex items-center justify-center"
               >
                 <button
                   type="button"
                   data-focus-interactive="true"
-                  onClick={() => scrollFocusToIndex(0)}
-                  className={`text-[11px] transition-colors cursor-pointer ${
-                    focusedSplitActiveIdx === 0
-                      ? 'font-semibold text-[#111315]'
-                      : 'font-medium text-[#5E646A]/65 hover:text-[#111315]'
-                  }`}
+                  onClick={() => onAddPurchaseForAxle?.(focusedAxle)}
+                  aria-label={`Add tyre for ${focusedAxle} axle`}
+                  className="w-16 h-16 rounded-full bg-[#111315] text-white hover:bg-black/85 active:scale-[0.96] shadow-[0_6px_18px_rgba(17,19,21,0.16)] flex items-center justify-center transition-all cursor-pointer"
                 >
-                  Left
+                  <Plus className="w-6 h-6" />
                 </button>
-                <div className="flex items-center gap-1">
-                  {focusedSplitItems.map((sideItem, idx) => {
-                    const isActive = idx === focusedSplitActiveIdx;
-                    return (
-                      <button
-                        key={sideItem.side}
-                        type="button"
-                        data-focus-interactive="true"
-                        onClick={() => scrollFocusToIndex(idx)}
-                        aria-label={`Select ${focusedAxle} ${sideItem.side}`}
-                        className="p-1 flex items-center justify-center cursor-pointer"
-                      >
-                        <span
-                          className={`block rounded-full transition-all duration-200 ${
-                            isActive
-                              ? 'w-2 h-2 bg-[#111315]'
-                              : 'w-1.5 h-1.5 bg-[#111315]/22 hover:bg-[#111315]/45'
-                          }`}
-                        />
-                      </button>
-                    );
-                  })}
-                </div>
-                <button
-                  type="button"
-                  data-focus-interactive="true"
-                  onClick={() => scrollFocusToIndex(1)}
-                  className={`text-[11px] transition-colors cursor-pointer ${
-                    focusedSplitActiveIdx === 1
-                      ? 'font-semibold text-[#111315]'
-                      : 'font-medium text-[#5E646A]/65 hover:text-[#111315]'
-                  }`}
-                >
-                  Right
-                </button>
-              </div>
-
-              {/* Selected Side Info */}
-              {(() => {
-                const activeSideItem = focusedSplitItems[focusedSplitActiveIdx];
-                if (!activeSideItem) return null;
-                const activeSideTyre = activeSideItem.tyre;
-                const activeSidePurchase = activeSideItem.purchase;
-                const sidePositionLabel = `${focusedAxle} ${activeSideItem.side}`;
-
-                if (!activeSideTyre || !activeSidePurchase) {
-                  return (
-                    <div className="mt-2 px-6 text-center">
-                      <p className="font-display text-base font-semibold text-[#111315]">
-                        No tyre selected
-                      </p>
-                      <p className="mt-0.5 text-xs text-[#5E646A]">
-                        Tap + to add {sidePositionLabel.toLowerCase()} tyre
-                      </p>
-                    </div>
-                  );
+              </motion.div>
+            ) : focusedAxle && focusedTyre ? (
+              <motion.div
+                key={`focus-tyre-${focusedAxle}-${focusedTyre.id}`}
+                initial={
+                  prefersReduced
+                    ? { opacity: 0 }
+                    : { opacity: 0, scale: 0.82, rotate: -12 }
                 }
-
-                return (
-                  <div className="mt-2 px-6 text-center">
-                    {activeSideTyre.price > 0 && (
-                      <p className="font-display text-2xl sm:text-[26px] font-bold tracking-tight tabular-nums text-[#111315] leading-none">
-                        {formatPriceRM(activeSideTyre.price)}
-                      </p>
-                    )}
-                    <h3
-                      className={`${activeSideTyre.price > 0 ? 'mt-1' : ''} font-display text-[15px] sm:text-base font-medium text-[#111315] leading-snug text-balance`}
-                    >
-                      {activeSideTyre.brandModel}
-                    </h3>
-                    <p className="mt-0.5 flex items-center justify-center gap-1.5 text-xs text-[#5E646A] tabular-nums">
-                      <span className="font-semibold text-[#111315]">
-                        {sidePositionLabel}
-                      </span>
-                      <span aria-hidden="true" className="text-[#9AA0A6]">
-                        ·
-                      </span>
-                      <span className="font-mono">{activeSideTyre.tyreSize}</span>
-                    </p>
-
-                    <div className="mt-3 pt-2.5 border-t border-black/8 flex flex-col items-center gap-1.5 max-w-xs mx-auto">
-                      <button
-                        type="button"
-                        data-focus-interactive="true"
-                        onClick={() =>
-                          onNavigateToContact?.(
-                            activeSidePurchase.vendor,
-                            activeSideItem.contact
-                          )
-                        }
-                        className="inline-flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium text-[#111315] hover:bg-black/[0.05] hover:text-[#FF5A1F] active:scale-[0.98] transition-all cursor-pointer"
-                      >
-                        <Store className="w-3.5 h-3.5 shrink-0 text-[#5E646A]" />
-                        <span>{activeSidePurchase.vendor}</span>
-                      </button>
-                      <p className="inline-flex items-center justify-center gap-1.5 text-[11px] text-[#5E646A] tabular-nums">
-                        <Calendar className="w-3 h-3 shrink-0 text-[#8C9298]" />
-                        <span>Purchased {formatDisplayDate(activeSidePurchase.date)}</span>
-                      </p>
-                    </div>
-                  </div>
-                );
-              })()}
-            </motion.div>
-          ) : focusedAxle && !focusedTyre ? (
-            <motion.div
-              key={`focus-empty-${focusedAxle}`}
-              initial={{ opacity: 0, scale: 0.9, y: 12 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.94, y: -8 }}
-              transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-              className="px-6 py-8 flex flex-col items-center text-center"
-            >
-              <button
-                type="button"
-                data-focus-interactive="true"
-                onClick={() => onAddPurchaseForAxle?.(focusedAxle)}
-                aria-label={`Add tyre for ${focusedAxle} axle`}
-                className="w-16 h-16 rounded-full bg-[#111315] text-white hover:bg-black/85 active:scale-[0.96] shadow-[0_6px_18px_rgba(17,19,21,0.16)] flex items-center justify-center transition-all cursor-pointer"
+                animate={{ opacity: 1, scale: 1, rotate: 0 }}
+                exit={
+                  prefersReduced
+                    ? { opacity: 0 }
+                    : { opacity: 0, scale: 0.86, rotate: 8 }
+                }
+                transition={{
+                  duration: prefersReduced ? 0.14 : 0.42,
+                  ease: [0.22, 1, 0.36, 1],
+                }}
+                className="absolute inset-0 flex items-center justify-center pointer-events-none"
               >
-                <Plus className="w-6 h-6" />
-              </button>
-              <p className="mt-3.5 font-display text-base font-semibold text-[#111315]">
-                No tyre selected
-              </p>
-              <p className="mt-0.5 text-xs text-[#5E646A]">
-                Tap + to add tyres for the {focusedAxle.toLowerCase()} set
-              </p>
-            </motion.div>
-          ) : focusedAxle && focusedTyre ? (
-            <motion.div
-              key={`focus-tyre-${focusedAxle}-${focusedTyre.id}`}
-              initial={{ opacity: 0, scale: 0.88, y: 12 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.92, y: -8 }}
-              transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-              className="w-full flex flex-col items-center justify-center"
-            >
-              {/* Static face-on view of the selected wheel & tyre */}
-              <div className="w-full py-2 flex items-center justify-center">
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.82, rotate: -16 }}
-                  animate={{ opacity: 1, scale: 1, rotate: 0 }}
-                  transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
-                  className="w-[164px] h-[164px] sm:w-[184px] sm:h-[184px] flex items-center justify-center"
-                >
+                <div className="w-[164px] h-[164px] sm:w-[184px] sm:h-[184px] flex items-center justify-center">
                   {failedImages[`faceon-${focusedTyre.id}`] ? (
                     <div className="w-full h-full rounded-full bg-[#E5E7E3] flex items-center justify-center text-xs font-medium text-[#5E646A]">
                       Tyre
@@ -924,184 +1042,50 @@ export function SavedTyresCarousel({
                       className="w-full h-full object-contain select-none pointer-events-none"
                     />
                   )}
-                </motion.div>
-              </div>
-
-              {/* Focused Tyre Info + Clickable Garage Location (jumps to Contacts) & Purchase Date */}
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.28, delay: 0.06, ease: [0.22, 1, 0.36, 1] }}
-                className="mt-2 px-6 text-center"
-              >
-                {focusedTyre.price > 0 && (
-                  <p className="font-display text-2xl sm:text-[26px] font-bold tracking-tight tabular-nums text-[#111315] leading-none">
-                    {formatPriceRM(focusedTyre.price)}
-                  </p>
-                )}
-                <h3
-                  className={`${focusedTyre.price > 0 ? 'mt-1' : ''} font-display text-[15px] sm:text-base font-medium text-[#111315] leading-snug text-balance`}
-                >
-                  {focusedTyre.brandModel}
-                </h3>
-                <p className="mt-0.5 flex items-center justify-center gap-1.5 text-xs text-[#5E646A] tabular-nums">
-                  <span className="font-semibold text-[#111315]">
-                    {focusedAxle}
-                  </span>
-                  <span aria-hidden="true" className="text-[#9AA0A6]">
-                    ·
-                  </span>
-                  <span className="font-mono">{focusedTyre.tyreSize}</span>
-                </p>
-
-                {focusedPurchase && (
-                  <div className="mt-3 pt-2.5 border-t border-black/8 flex flex-col items-center gap-1.5 max-w-xs mx-auto">
-                    <button
-                      type="button"
-                      data-focus-interactive="true"
-                      onClick={() =>
-                        onNavigateToContact?.(focusedPurchase.vendor, focusedContact)
-                      }
-                      className="inline-flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium text-[#111315] hover:bg-black/[0.05] hover:text-[#FF5A1F] active:scale-[0.98] transition-all cursor-pointer"
-                    >
-                      <Store className="w-3.5 h-3.5 shrink-0 text-[#5E646A]" />
-                      <span>{focusedPurchase.vendor}</span>
-                    </button>
-                    <p className="inline-flex items-center justify-center gap-1.5 text-[11px] text-[#5E646A] tabular-nums">
-                      <Calendar className="w-3 h-3 shrink-0 text-[#8C9298]" />
-                      <span>Purchased {formatDisplayDate(focusedPurchase.date)}</span>
-                    </p>
-                  </div>
-                )}
+                </div>
               </motion.div>
-            </motion.div>
-          ) : sortedTyres.length === 0 ? (
-            <motion.div
-              key="carousel-empty"
-              initial={{ opacity: 0, scale: 0.94 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.94 }}
-              transition={{ duration: 0.2 }}
-              className="px-6 py-6 flex flex-col items-center text-center"
+            ) : null}
+          </AnimatePresence>
+        </div>
+
+        {/* Dots / Left-Right Indicator Strip — smoothly fades and collapses instead of snapping */}
+        <motion.div
+          initial={false}
+          animate={{
+            height: showDotsRow ? 20 : 0,
+            opacity: showDotsRow ? 1 : 0,
+            marginTop: showDotsRow ? 4 : 0,
+          }}
+          transition={{ duration: prefersReduced ? 0.12 : 0.34, ease: [0.22, 1, 0.36, 1] }}
+          className="w-full overflow-hidden flex items-center justify-center"
+        >
+          {focusedAxle && focusedSplitItems ? (
+            <div
+              data-focus-interactive="true"
+              className="flex items-center justify-center gap-2.5"
             >
               <button
                 type="button"
-                onClick={openAddModal}
-                className="w-[136px] h-[136px] rounded-full border-2 border-dashed border-[#111315]/25 bg-white/55 hover:bg-white/85 flex flex-col items-center justify-center gap-1.5 text-[#111315] transition-colors cursor-pointer"
+                data-focus-interactive="true"
+                onClick={() => scrollFocusToIndex(0)}
+                className={`text-[11px] transition-colors cursor-pointer ${
+                  focusedSplitActiveIdx === 0
+                    ? 'font-semibold text-[#111315]'
+                    : 'font-medium text-[#5E646A]/65 hover:text-[#111315]'
+                }`}
               >
-                <Plus className="w-6 h-6" />
-                <span className="text-xs font-medium">Add tyre</span>
+                Left
               </button>
-              <p className="mt-3 text-xs text-[#5E646A]">
-                Save tyre models &amp; prices for {car.displayTitle}
-              </p>
-            </motion.div>
-          ) : (
-            <motion.div
-              key="carousel-normal"
-              initial={{ opacity: 0, scale: 0.96, y: 8 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.94, y: -8 }}
-              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-              className="w-full relative"
-            >
-              {/* Horizontal side-scrolling wheel showcase */}
-              <div className="relative w-full flex items-center">
-                {activeIndex > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => scrollToIndex(activeIndex - 1)}
-                    aria-label="Previous tyre"
-                    className="hidden sm:flex absolute left-4 z-10 w-10 h-10 rounded-full bg-white/80 hover:bg-white border border-black/8 shadow-[0_2px_10px_rgba(17,19,21,0.06)] items-center justify-center text-[#111315] transition-all cursor-pointer"
-                  >
-                    <ChevronLeft className="w-4 h-4" />
-                  </button>
-                )}
-
-                <div
-                  ref={scrollerRef}
-                  onScroll={handleScroll}
-                  onTouchStart={releaseProgrammaticLock}
-                  onWheel={releaseProgrammaticLock}
-                  className="w-full overflow-x-auto snap-x snap-mandatory flex items-center px-[calc(50%-72px)] sm:px-[calc(50%-82px)] py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-                >
-                  {sortedTyres.map((item, idx) => {
-                    const isActive = idx === activeIndex;
-                    const imgSrc = resolveTyreImage(car.id, item);
-                    const imgBroken = failedImages[item.id];
-
-                    return (
-                      <button
-                        key={item.id}
-                        ref={(el) => {
-                          itemRefs.current[idx] = el;
-                        }}
-                        type="button"
-                        onClick={() => {
-                          if (isActive) {
-                            openEditModal(item);
-                          } else {
-                            scrollToIndex(idx);
-                          }
-                        }}
-                        aria-label={
-                          isActive
-                            ? `Edit ${item.brandModel}`
-                            : `Select ${item.brandModel}`
-                        }
-                        className="snap-center shrink-0 w-[144px] sm:w-[164px] flex items-center justify-center focus:outline-none cursor-pointer"
-                      >
-                        <div
-                          className={`w-[136px] h-[136px] sm:w-[152px] sm:h-[152px] flex items-center justify-center transition-all duration-200 ${
-                            isActive
-                              ? 'scale-100 opacity-100'
-                              : 'scale-[0.74] opacity-45 hover:opacity-75'
-                          }`}
-                        >
-                          {imgBroken ? (
-                            <div className="w-full h-full rounded-full bg-[#E5E7E3] flex items-center justify-center text-xs font-medium text-[#5E646A]">
-                              Tyre
-                            </div>
-                          ) : (
-                            <img
-                              src={imgSrc}
-                              alt={`${item.brandModel} wheel and tyre`}
-                              referrerPolicy="no-referrer"
-                              onError={() =>
-                                setFailedImages((prev) => ({ ...prev, [item.id]: true }))
-                              }
-                              className="w-full h-full object-contain select-none pointer-events-none"
-                              draggable={false}
-                            />
-                          )}
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {activeIndex < sortedTyres.length - 1 && (
-                  <button
-                    type="button"
-                    onClick={() => scrollToIndex(activeIndex + 1)}
-                    aria-label="Next tyre"
-                    className="hidden sm:flex absolute right-4 z-10 w-10 h-10 rounded-full bg-white/80 hover:bg-white border border-black/8 shadow-[0_2px_10px_rgba(17,19,21,0.06)] items-center justify-center text-[#111315] transition-all cursor-pointer"
-                  >
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-
-              {/* Pagination dots */}
-              <div className="mt-1 flex items-center justify-center gap-1.5">
-                {sortedTyres.map((item, idx) => {
-                  const isActive = idx === activeIndex;
+              <div className="flex items-center gap-1">
+                {focusedSplitItems.map((sideItem, idx) => {
+                  const isActive = idx === focusedSplitActiveIdx;
                   return (
                     <button
-                      key={item.id}
+                      key={sideItem.side}
                       type="button"
-                      onClick={() => scrollToIndex(idx)}
-                      aria-label={`View ${item.brandModel}`}
+                      data-focus-interactive="true"
+                      onClick={() => scrollFocusToIndex(idx)}
+                      aria-label={`Select ${focusedAxle} ${sideItem.side}`}
                       className="p-1 flex items-center justify-center cursor-pointer"
                     >
                       <span
@@ -1115,45 +1099,167 @@ export function SavedTyresCarousel({
                   );
                 })}
               </div>
-
-              {/* Active Tyre Price, Name, Axle & Size */}
-              {activeTyre && (
-                <div className="mt-1.5 px-6 text-center">
-                  {activeTyre.price > 0 && (
-                    <p className="font-display text-2xl sm:text-[26px] font-bold tracking-tight tabular-nums text-[#111315] leading-none">
-                      {formatPriceRM(activeTyre.price)}
-                    </p>
-                  )}
-                  <h3
-                    className={`${activeTyre.price > 0 ? 'mt-1' : ''} font-display text-[15px] sm:text-base font-medium text-[#111315] leading-snug text-balance`}
+              <button
+                type="button"
+                data-focus-interactive="true"
+                onClick={() => scrollFocusToIndex(1)}
+                className={`text-[11px] transition-colors cursor-pointer ${
+                  focusedSplitActiveIdx === 1
+                    ? 'font-semibold text-[#111315]'
+                    : 'font-medium text-[#5E646A]/65 hover:text-[#111315]'
+                }`}
+              >
+                Right
+              </button>
+            </div>
+          ) : !isFocused && sortedTyres.length > 0 ? (
+            <div className="flex items-center justify-center gap-1.5">
+              {sortedTyres.map((item, idx) => {
+                const isActive = idx === activeIndex;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => scrollToIndex(idx)}
+                    aria-label={`View ${item.brandModel}`}
+                    className="p-1 flex items-center justify-center cursor-pointer"
                   >
-                    {activeTyre.brandModel}
-                  </h3>
-                  <p className="mt-0.5 flex items-center justify-center gap-1.5 text-xs text-[#5E646A] tabular-nums">
-                    <span className="font-semibold text-[#111315]">
-                      {activeTyre.axle}
-                    </span>
-                    <span aria-hidden="true" className="text-[#9AA0A6]">
-                      ·
-                    </span>
-                    <span className="font-mono">{activeTyre.tyreSize}</span>
-                  </p>
-                  {activeTyre.notes && (
-                    <p className="mt-0.5 text-[11px] text-[#6B7075] truncate max-w-xs mx-auto">
-                      {activeTyre.notes}
-                    </p>
-                  )}
+                    <span
+                      className={`block rounded-full transition-all duration-200 ${
+                        isActive
+                          ? 'w-2 h-2 bg-[#111315]'
+                          : 'w-1.5 h-1.5 bg-[#111315]/22 hover:bg-[#111315]/45'
+                      }`}
+                    />
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
+        </motion.div>
 
-                  {rulesPending && (
-                    <p className="mt-1 text-[11px] text-[#991B1B]">
-                      Publish the savedTyres Firestore rule to sync edits.
+        {/* Persistent Tyre Info Block below the wheel — glides downward smoothly and cross-fades only when values change */}
+        <div className="mt-1.5 px-6 text-center w-full">
+          <div className="relative flex flex-col items-center">
+            <AnimatePresence mode="popLayout" initial={false}>
+              <motion.div
+                key={summaryKey}
+                initial={prefersReduced ? { opacity: 0 } : { opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={prefersReduced ? { opacity: 0 } : { opacity: 0, y: -6 }}
+                transition={{ duration: prefersReduced ? 0.12 : 0.24, ease: [0.22, 1, 0.36, 1] }}
+                className="w-full"
+              >
+                {displayState.mode === 'empty' ? (
+                  <>
+                    {displayState.emptyTitle && (
+                      <p className="font-display text-base font-semibold text-[#111315]">
+                        {displayState.emptyTitle}
+                      </p>
+                    )}
+                    <p
+                      className={`${displayState.emptyTitle ? 'mt-0.5' : 'mt-1.5'} text-xs text-[#5E646A]`}
+                    >
+                      {displayState.emptySubtitle}
                     </p>
-                  )}
+                  </>
+                ) : (
+                  <>
+                    {displayState.price > 0 && (
+                      <p className="font-display text-2xl sm:text-[26px] font-bold tracking-tight tabular-nums text-[#111315] leading-none">
+                        {formatPriceRM(displayState.price)}
+                      </p>
+                    )}
+                    <h3
+                      className={`${displayState.price > 0 ? 'mt-1' : ''} font-display text-[15px] sm:text-base font-medium text-[#111315] leading-snug text-balance`}
+                    >
+                      {displayState.brandModel}
+                    </h3>
+                    <p className="mt-0.5 flex items-center justify-center gap-1.5 text-xs text-[#5E646A] tabular-nums">
+                      <span className="font-semibold text-[#111315]">
+                        {displayState.axleLabel}
+                      </span>
+                      <span aria-hidden="true" className="text-[#9AA0A6]">
+                        ·
+                      </span>
+                      <span className="font-mono">{displayState.tyreSize}</span>
+                    </p>
+                  </>
+                )}
+              </motion.div>
+            </AnimatePresence>
+          </div>
+
+          {/* Optional Carousel Notes (overview only) */}
+          <AnimatePresence initial={false}>
+            {displayState.mode === 'tyre' && displayState.notes && (
+              <motion.div
+                key={`notes-${displayState.notes}`}
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: prefersReduced ? 0.12 : 0.26, ease: [0.22, 1, 0.36, 1] }}
+                className="overflow-hidden"
+              >
+                <p className="mt-0.5 text-[11px] text-[#6B7075] truncate max-w-xs mx-auto">
+                  {displayState.notes}
+                </p>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Focused Vendor & Purchase Date (unfurls smoothly below main tyre text) */}
+          <AnimatePresence initial={false}>
+            {hasVendorFooter && displayState.mode === 'tyre' && (
+              <motion.div
+                key={`purchase-meta-${displayState.purchaseVendor}-${displayState.purchaseDate}`}
+                initial={
+                  prefersReduced
+                    ? { height: 0, opacity: 0 }
+                    : { height: 0, opacity: 0, y: -6 }
+                }
+                animate={{ height: 'auto', opacity: 1, y: 0 }}
+                exit={
+                  prefersReduced
+                    ? { height: 0, opacity: 0 }
+                    : { height: 0, opacity: 0, y: -6 }
+                }
+                transition={{
+                  duration: prefersReduced ? 0.12 : 0.36,
+                  ease: [0.22, 1, 0.36, 1],
+                }}
+                className="overflow-hidden"
+              >
+                <div className="mt-3 pt-2.5 border-t border-black/8 flex flex-col items-center gap-1.5 max-w-xs mx-auto">
+                  <button
+                    type="button"
+                    data-focus-interactive="true"
+                    onClick={() =>
+                      onNavigateToContact?.(
+                        displayState.purchaseVendor!,
+                        displayState.purchaseContact
+                      )
+                    }
+                    className="inline-flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium text-[#111315] hover:bg-black/[0.05] hover:text-[#FF5A1F] active:scale-[0.98] transition-all cursor-pointer"
+                  >
+                    <Store className="w-3.5 h-3.5 shrink-0 text-[#5E646A]" />
+                    <span>{displayState.purchaseVendor}</span>
+                  </button>
+                  <p className="inline-flex items-center justify-center gap-1.5 text-[11px] text-[#5E646A] tabular-nums">
+                    <Calendar className="w-3 h-3 shrink-0 text-[#8C9298]" />
+                    <span>Purchased {formatDisplayDate(displayState.purchaseDate!)}</span>
+                  </p>
                 </div>
-              )}
-            </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {!isFocused && rulesPending && (
+            <p className="mt-1 text-[11px] text-[#991B1B]">
+              Publish the savedTyres Firestore rule to sync edits.
+            </p>
           )}
-        </AnimatePresence>
+        </div>
       </motion.section>
 
       {/* Add / Edit Saved Tyre Option Modal (portaled above BottomNav) */}

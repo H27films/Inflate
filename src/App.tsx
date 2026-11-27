@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeftRight, Loader2, Plus } from 'lucide-react';
+import { AnimatePresence } from 'motion/react';
 import { onAuthStateChanged, signInWithPopup, type User } from 'firebase/auth';
 import {
   CarId,
@@ -44,6 +45,7 @@ import { QuickLogModal } from './components/QuickLogModal';
 import { ActiveTab, BottomNav } from './components/BottomNav';
 import { PWAInstallButton } from './components/PWAInstallButton';
 import { OfflineIndicator } from './components/OfflineIndicator';
+import { SplashScreen } from './components/SplashScreen';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -79,6 +81,18 @@ export default function App() {
   const [purchasesExpanded, setPurchasesExpanded] = useState(false);
   const [logModalOpen, setLogModalOpen] = useState(false);
   const [addPurchaseOpen, setAddPurchaseOpen] = useState(false);
+  const [introComplete, setIntroComplete] = useState(false);
+  const [manualSplashOpen, setManualSplashOpen] = useState(false);
+
+  useEffect(() => {
+    const prefersReduced =
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const timer = window.setTimeout(() => {
+      setIntroComplete(true);
+    }, prefersReduced ? 320 : 2900);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   if (fatalError) {
     throw fatalError;
@@ -229,26 +243,29 @@ export default function App() {
     }
   };
 
-  if (!authReady || (user && hydratingData)) {
-    return (
-      <div className="min-h-dvh bg-[#F3F4F2] text-[#111315] flex flex-col items-center justify-center gap-3 p-6">
-        <span className="font-brand text-sm tracking-[0.42em] pl-[0.42em] uppercase text-[#111315]">
-          INFLATE
-        </span>
-        <Loader2 className="w-5 h-5 animate-spin text-[#5E646A]" />
-      </div>
-    );
-  }
+  const isHydrating = !authReady || (Boolean(user) && hydratingData);
+  const showSplash = !introComplete || isHydrating || manualSplashOpen;
 
-  if (!user) {
-    return (
-      <div className="min-h-dvh bg-[#F3F4F2] text-[#111315] flex flex-col items-center justify-center p-6 relative">
-        <OfflineIndicator />
+  const renderContent = () => {
+    if (isHydrating) {
+      return <div className="min-h-dvh bg-[#F3F4F2] text-[#111315]" />;
+    }
+
+    if (!user) {
+      return (
+        <div className="min-h-dvh bg-[#F3F4F2] text-[#111315] flex flex-col items-center justify-center p-6 relative">
+          <OfflineIndicator />
         <div className="fixed top-[calc(1rem+env(safe-area-inset-top))] right-4 z-30">
           <PWAInstallButton />
         </div>
         <div className="w-full max-w-sm bg-white rounded-3xl border border-black/8 shadow-[0_10px_32px_rgba(17,19,21,0.06)] p-6 space-y-5 text-center">
           <div className="space-y-1.5">
+            <img
+              src="/inflate-mark.png"
+              alt="Inflate emblem"
+              referrerPolicy="no-referrer"
+              className="w-10 h-10 mx-auto mb-2 object-contain"
+            />
             <p className="font-brand text-sm tracking-[0.42em] pl-[0.42em] uppercase text-[#111315]">
               INFLATE
             </p>
@@ -286,10 +303,10 @@ export default function App() {
           </button>
         </div>
       </div>
-    );
-  }
+      );
+    }
 
-  const activeCar = garage[activeCarId];
+    const activeCar = garage[activeCarId];
   const otherCarId: CarId = activeCarId === 'slk250' ? 'fortuner' : 'slk250';
   const otherCar = garage[otherCarId];
 
@@ -374,14 +391,14 @@ export default function App() {
   };
 
   return (
-    <div
-      className={
-        activeTab === 'garage'
-          ? 'h-dvh overflow-hidden bg-[#F3F4F2] text-[#111315] flex flex-col'
-          : 'min-h-dvh bg-[#F3F4F2] text-[#111315] flex flex-col'
-      }
-    >
-      <OfflineIndicator />
+      <div
+        className={
+          activeTab === 'garage'
+            ? 'h-dvh overflow-hidden bg-[#F3F4F2] text-[#111315] flex flex-col'
+            : 'min-h-dvh bg-[#F3F4F2] text-[#111315] flex flex-col'
+        }
+      >
+        <OfflineIndicator />
       {/* Top Bar: Left Add Purchase (on Purchases) or PWA Install (on Home) · Centered INFLATE · Top-Right Switch Cars */}
       <header className="shrink-0 z-20 bg-[#F3F4F2] border-b border-black/6 pt-[calc(0.75rem+env(safe-area-inset-top))]">
         <div className="max-w-5xl lg:max-w-[540px] mx-auto px-4 h-13 pb-0.5 relative flex items-center justify-center">
@@ -406,9 +423,14 @@ export default function App() {
             type="button"
             onClick={() => {
               setLogExpanded(false);
-              setActiveTab('garage');
+              if (activeTab === 'garage') {
+                setManualSplashOpen(true);
+              } else {
+                setActiveTab('garage');
+              }
             }}
-            aria-label="Go to Home"
+            aria-label={activeTab === 'garage' ? 'View Inflate intro screen' : 'Go to Home'}
+            title={activeTab === 'garage' ? 'View Inflate intro screen' : 'Go to Home'}
             className="font-brand text-sm sm:text-[15px] tracking-[0.42em] pl-[0.42em] uppercase text-[#111315] hover:opacity-70 active:scale-[0.98] transition-all cursor-pointer py-2"
           >
             INFLATE
@@ -607,5 +629,22 @@ export default function App() {
         onLogCreated={handleAddPressureLog}
       />
     </div>
+    );
+  };
+
+  return (
+    <>
+      <AnimatePresence>
+        {showSplash && (
+          <SplashScreen
+            key="inflate-splash"
+            stillLoading={!manualSplashOpen && introComplete && isHydrating}
+            interactive={manualSplashOpen}
+            onDismiss={() => setManualSplashOpen(false)}
+          />
+        )}
+      </AnimatePresence>
+      {renderContent()}
+    </>
   );
 }

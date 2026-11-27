@@ -298,6 +298,9 @@ function resolveCanonicalTyreImageFileName(
   if (carId === 'fortuner' && axle === 'Front' && normalized.includes('fortune')) {
     return 'fortuner-front-fortune.png';
   }
+  if (carId === 'fortuner' && normalized.includes('opa34')) {
+    return 'fortuner-front-toyoopa34.png';
+  }
   return undefined;
 }
 
@@ -382,15 +385,19 @@ async function seedSavedTyresIfEmpty(uid: string): Promise<void> {
       }
       await batch.commit();
     } else {
-      // Link any existing matching tyre records that were seeded before cutout PNGs were added
+      // Link any existing matching tyre records and seed newly added starter tyres once
       const linkBatch = writeBatch(db);
       let hasUpdates = false;
+      let hasToyoOpa34 = false;
       existingTyresSnap.forEach((docSnap) => {
         const d = docSnap.data();
         const carId = d.carId as CarId;
         if (carId !== 'slk250' && carId !== 'fortuner') return;
         const axle = sanitizeAxle(d.axle);
         const brandModel = String(d.brandModel ?? '');
+        if (carId === 'fortuner' && brandModel.toLowerCase().includes('opa34')) {
+          hasToyoOpa34 = true;
+        }
         const canonicalFile = resolveCanonicalTyreImageFileName(carId, axle, brandModel);
         if (!canonicalFile) return;
         const currentFile = typeof d.imageFileName === 'string' ? d.imageFileName : undefined;
@@ -404,8 +411,36 @@ async function seedSavedTyresIfEmpty(uid: string): Promise<void> {
           });
         }
       });
+
+      const toyoSeedFlag = `inflate_seeded_fort_tyre_4_${uid}`;
+      const alreadySeededToyo =
+        typeof window !== 'undefined' && window.localStorage.getItem(toyoSeedFlag) === '1';
+      const toyoStarter = INITIAL_GARAGE.fortuner.savedTyres?.find((t) => t.id === 'fort-tyre-4');
+      if (!hasToyoOpa34 && !alreadySeededToyo && toyoStarter) {
+        hasUpdates = true;
+        const toyoRef = doc(db, 'savedTyres', makeDocId(uid, toyoStarter.id));
+        const toyoData: Record<string, unknown> = {
+          ownerId: uid,
+          carId: 'fortuner',
+          carDocId: makeDocId(uid, 'fortuner'),
+          brandModel: toyoStarter.brandModel.slice(0, 120),
+          price: Math.max(0, Math.min(100000, Number(toyoStarter.price) || 0)),
+          axle: sanitizeAxle(toyoStarter.axle),
+          tyreSize: toyoStarter.tyreSize.slice(0, 80),
+          wheelImageKey: sanitizeWheelKey(toyoStarter.wheelImageKey),
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        };
+        if (toyoStarter.imageFileName) toyoData.imageFileName = toyoStarter.imageFileName;
+        if (toyoStarter.imageUrl) toyoData.imageUrl = toyoStarter.imageUrl;
+        linkBatch.set(toyoRef, toyoData);
+      }
+
       if (hasUpdates) {
         await linkBatch.commit();
+        if (!hasToyoOpa34 && !alreadySeededToyo && toyoStarter && typeof window !== 'undefined') {
+          window.localStorage.setItem(toyoSeedFlag, '1');
+        }
       }
     }
 

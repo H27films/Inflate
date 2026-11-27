@@ -229,6 +229,16 @@ export const INITIAL_GARAGE: Record<CarId, CarProfile> = {
         wheelImageKey: 'all-terrain',
       },
       {
+        id: 'fort-tyre-4',
+        brandModel: 'Toyo Opa34',
+        price: 0,
+        axle: 'Front',
+        tyreSize: '265/65 R17',
+        wheelImageKey: 'all-terrain',
+        imageFileName: 'fortuner-front-toyoopa34.png',
+        imageUrl: '/assets/tyres/fortuner-front-toyoopa34.png',
+      },
+      {
         id: 'fort-tyre-2',
         brandModel: 'BFGoodrich Trail-Terrain',
         price: 790,

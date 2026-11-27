@@ -74,7 +74,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('garage');
   const [selectedCorner, setSelectedCorner] = useState<TyreCorner | null>(null);
   const [logExpanded, setLogExpanded] = useState(false);
-  const [purchasesExpanded, setPurchasesExpanded] = useState(true);
+  const [purchasesExpanded, setPurchasesExpanded] = useState(false);
   const [logModalOpen, setLogModalOpen] = useState(false);
   const [addPurchaseOpen, setAddPurchaseOpen] = useState(false);
 

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'motion/react';
-import { Calendar, ChevronLeft, ChevronRight, Pencil, Plus, Store, Trash2, Upload, X } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, Plus, Store, Trash2, Upload, X } from 'lucide-react';
 import {
   CarId,
   CarProfile,
@@ -61,6 +61,9 @@ function resolveLocalCutoutFileName(
   }
   if (carId === 'fortuner' && axle === 'Front' && normalized.includes('fortune')) {
     return 'fortuner-front-fortune.png';
+  }
+  if (carId === 'fortuner' && normalized.includes('opa34')) {
+    return 'fortuner-front-toyoopa34.png';
   }
   return null;
 }
@@ -353,7 +356,7 @@ export function SavedTyresCarousel({
   const openEditModal = (item: SavedTyreOption) => {
     setEditingTyre(item);
     setBrandModel(item.brandModel);
-    setPrice(String(item.price));
+    setPrice(item.price > 0 ? String(item.price) : '');
     setAxle(item.axle);
     setTyreSize(item.tyreSize);
     setWheelImageKey(item.wheelImageKey);
@@ -474,124 +477,147 @@ export function SavedTyresCarousel({
         aria-label="Saved tyre options"
         className="w-full my-auto py-2 flex flex-col items-center justify-center"
       >
-        {focusedAxle && !focusedTyre ? (
-          <div className="px-6 py-8 flex flex-col items-center text-center">
-            <button
-              type="button"
-              data-focus-interactive="true"
-              onClick={() => onAddPurchaseForAxle?.(focusedAxle)}
-              aria-label={`Add tyre for ${focusedAxle} axle`}
-              className="w-16 h-16 rounded-full bg-[#111315] text-white hover:bg-black/85 active:scale-[0.96] shadow-[0_6px_18px_rgba(17,19,21,0.16)] flex items-center justify-center transition-all cursor-pointer"
+        <AnimatePresence mode="wait" initial={false}>
+          {focusedAxle && !focusedTyre ? (
+            <motion.div
+              key={`focus-empty-${focusedAxle}`}
+              initial={{ opacity: 0, scale: 0.9, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.94, y: -8 }}
+              transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+              className="px-6 py-8 flex flex-col items-center text-center"
             >
-              <Plus className="w-6 h-6" />
-            </button>
-            <p className="mt-3.5 font-display text-base font-semibold text-[#111315]">
-              No tyre selected
-            </p>
-            <p className="mt-0.5 text-xs text-[#5E646A]">
-              Tap + to add tyres for the {focusedAxle.toLowerCase()} set
-            </p>
-          </div>
-        ) : focusedAxle && focusedTyre ? (
-          <div className="w-full flex flex-col items-center justify-center">
-            {/* Static face-on view of the selected wheel & tyre */}
-            <div className="w-full py-2 flex items-center justify-center">
-              <motion.div
-                key={`focus-wheel-${focusedAxle}-${focusedTyre.id}`}
-                initial={{ opacity: 0, scale: 0.88 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-                className="w-[164px] h-[164px] sm:w-[184px] sm:h-[184px] flex items-center justify-center"
+              <button
+                type="button"
+                data-focus-interactive="true"
+                onClick={() => onAddPurchaseForAxle?.(focusedAxle)}
+                aria-label={`Add tyre for ${focusedAxle} axle`}
+                className="w-16 h-16 rounded-full bg-[#111315] text-white hover:bg-black/85 active:scale-[0.96] shadow-[0_6px_18px_rgba(17,19,21,0.16)] flex items-center justify-center transition-all cursor-pointer"
               >
-                {failedImages[`faceon-${focusedTyre.id}`] ? (
-                  <div className="w-full h-full rounded-full bg-[#E5E7E3] flex items-center justify-center text-xs font-medium text-[#5E646A]">
-                    Tyre
+                <Plus className="w-6 h-6" />
+              </button>
+              <p className="mt-3.5 font-display text-base font-semibold text-[#111315]">
+                No tyre selected
+              </p>
+              <p className="mt-0.5 text-xs text-[#5E646A]">
+                Tap + to add tyres for the {focusedAxle.toLowerCase()} set
+              </p>
+            </motion.div>
+          ) : focusedAxle && focusedTyre ? (
+            <motion.div
+              key={`focus-tyre-${focusedAxle}-${focusedTyre.id}`}
+              initial={{ opacity: 0, scale: 0.88, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.92, y: -8 }}
+              transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+              className="w-full flex flex-col items-center justify-center"
+            >
+              {/* Static face-on view of the selected wheel & tyre */}
+              <div className="w-full py-2 flex items-center justify-center">
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.82, rotate: -16 }}
+                  animate={{ opacity: 1, scale: 1, rotate: 0 }}
+                  transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
+                  className="w-[164px] h-[164px] sm:w-[184px] sm:h-[184px] flex items-center justify-center"
+                >
+                  {failedImages[`faceon-${focusedTyre.id}`] ? (
+                    <div className="w-full h-full rounded-full bg-[#E5E7E3] flex items-center justify-center text-xs font-medium text-[#5E646A]">
+                      Tyre
+                    </div>
+                  ) : (
+                    <img
+                      src={resolveFaceOnTyreImage(car.id, focusedTyre)}
+                      alt={`${focusedTyre.brandModel} face-on wheel and tyre`}
+                      referrerPolicy="no-referrer"
+                      draggable={false}
+                      onError={() =>
+                        setFailedImages((prev) => ({
+                          ...prev,
+                          [`faceon-${focusedTyre.id}`]: true,
+                        }))
+                      }
+                      className="w-full h-full object-contain select-none pointer-events-none"
+                    />
+                  )}
+                </motion.div>
+              </div>
+
+              {/* Focused Tyre Info + Clickable Garage Location (jumps to Contacts) & Purchase Date */}
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.28, delay: 0.06, ease: [0.22, 1, 0.36, 1] }}
+                className="mt-2 px-6 text-center"
+              >
+                {focusedTyre.price > 0 && (
+                  <p className="font-display text-2xl sm:text-[26px] font-bold tracking-tight tabular-nums text-[#111315] leading-none">
+                    {formatPriceRM(focusedTyre.price)}
+                  </p>
+                )}
+                <h3
+                  className={`${focusedTyre.price > 0 ? 'mt-1' : ''} font-display text-[15px] sm:text-base font-medium text-[#111315] leading-snug text-balance`}
+                >
+                  {focusedTyre.brandModel}
+                </h3>
+                <p className="mt-0.5 flex items-center justify-center gap-1.5 text-xs text-[#5E646A] tabular-nums">
+                  <span className="font-semibold text-[#111315]">
+                    {focusedTyre.axle}
+                  </span>
+                  <span aria-hidden="true" className="text-[#9AA0A6]">
+                    ·
+                  </span>
+                  <span className="font-mono">{focusedTyre.tyreSize}</span>
+                </p>
+
+                {focusedPurchase && (
+                  <div className="mt-3 pt-2.5 border-t border-black/8 flex flex-col items-center gap-1.5 max-w-xs mx-auto">
+                    <button
+                      type="button"
+                      data-focus-interactive="true"
+                      onClick={() =>
+                        onNavigateToContact?.(focusedPurchase.vendor, focusedContact)
+                      }
+                      className="inline-flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium text-[#111315] hover:bg-black/[0.05] hover:text-[#FF5A1F] active:scale-[0.98] transition-all cursor-pointer"
+                    >
+                      <Store className="w-3.5 h-3.5 shrink-0 text-[#5E646A]" />
+                      <span>{focusedPurchase.vendor}</span>
+                    </button>
+                    <p className="inline-flex items-center justify-center gap-1.5 text-[11px] text-[#5E646A] tabular-nums">
+                      <Calendar className="w-3 h-3 shrink-0 text-[#8C9298]" />
+                      <span>Purchased {formatDisplayDate(focusedPurchase.date)}</span>
+                    </p>
                   </div>
-                ) : (
-                  <img
-                    src={resolveFaceOnTyreImage(car.id, focusedTyre)}
-                    alt={`${focusedTyre.brandModel} face-on wheel and tyre`}
-                    referrerPolicy="no-referrer"
-                    draggable={false}
-                    onError={() =>
-                      setFailedImages((prev) => ({
-                        ...prev,
-                        [`faceon-${focusedTyre.id}`]: true,
-                      }))
-                    }
-                    className="w-full h-full object-contain select-none pointer-events-none"
-                  />
                 )}
               </motion.div>
-            </div>
-
-            {/* Focused Tyre Info + Clickable Garage Location (jumps to Contacts) & Purchase Date */}
-            <motion.div
-              key={`focus-meta-${focusedAxle}-${focusedTyre.id}`}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.25 }}
-              className="mt-2 px-6 text-center"
-            >
-              <p className="font-display text-2xl sm:text-[26px] font-bold tracking-tight tabular-nums text-[#111315] leading-none">
-                {formatPriceRM(focusedTyre.price)}
-              </p>
-              <h3 className="mt-1 font-display text-[15px] sm:text-base font-medium text-[#111315] leading-snug text-balance">
-                {focusedTyre.brandModel}
-              </h3>
-              <p className="mt-0.5 flex items-center justify-center gap-1.5 text-xs text-[#5E646A] tabular-nums">
-                <span className="font-semibold text-[#111315]">
-                  {focusedTyre.axle}
-                </span>
-                <span aria-hidden="true" className="text-[#9AA0A6]">
-                  ·
-                </span>
-                <span className="font-mono">{focusedTyre.tyreSize}</span>
-              </p>
-
-              {focusedPurchase && (
-                <div className="mt-3 pt-2.5 border-t border-black/8 flex flex-col items-center gap-1.5 max-w-xs mx-auto">
-                  <button
-                    type="button"
-                    data-focus-interactive="true"
-                    onClick={() =>
-                      onNavigateToContact?.(focusedPurchase.vendor, focusedContact)
-                    }
-                    className="inline-flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium text-[#111315] hover:bg-black/[0.05] hover:text-[#FF5A1F] active:scale-[0.98] transition-all cursor-pointer"
-                  >
-                    <Store className="w-3.5 h-3.5 shrink-0 text-[#5E646A]" />
-                    <span>{focusedPurchase.vendor}</span>
-                  </button>
-                  <p className="inline-flex items-center justify-center gap-1.5 text-[11px] text-[#5E646A] tabular-nums">
-                    <Calendar className="w-3 h-3 shrink-0 text-[#8C9298]" />
-                    <span>Purchased {formatDisplayDate(focusedPurchase.date)}</span>
-                  </p>
-                </div>
-              )}
             </motion.div>
-          </div>
-        ) : sortedTyres.length === 0 ? (
-          <div className="px-6 py-6 flex flex-col items-center text-center">
-            <button
-              type="button"
-              onClick={openAddModal}
-              className="w-[136px] h-[136px] rounded-full border-2 border-dashed border-[#111315]/25 bg-white/55 hover:bg-white/85 flex flex-col items-center justify-center gap-1.5 text-[#111315] transition-colors cursor-pointer"
+          ) : sortedTyres.length === 0 ? (
+            <motion.div
+              key="carousel-empty"
+              initial={{ opacity: 0, scale: 0.94 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.94 }}
+              transition={{ duration: 0.2 }}
+              className="px-6 py-6 flex flex-col items-center text-center"
             >
-              <Plus className="w-6 h-6" />
-              <span className="text-xs font-medium">Add tyre</span>
-            </button>
-            <p className="mt-3 text-xs text-[#5E646A]">
-              Save tyre models &amp; prices for {car.displayTitle}
-            </p>
-          </div>
-        ) : (
-          <AnimatePresence mode="wait">
+              <button
+                type="button"
+                onClick={openAddModal}
+                className="w-[136px] h-[136px] rounded-full border-2 border-dashed border-[#111315]/25 bg-white/55 hover:bg-white/85 flex flex-col items-center justify-center gap-1.5 text-[#111315] transition-colors cursor-pointer"
+              >
+                <Plus className="w-6 h-6" />
+                <span className="text-xs font-medium">Add tyre</span>
+              </button>
+              <p className="mt-3 text-xs text-[#5E646A]">
+                Save tyre models &amp; prices for {car.displayTitle}
+              </p>
+            </motion.div>
+          ) : (
             <motion.div
               key="carousel-normal"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.16 }}
+              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.94, y: -8 }}
+              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
               className="w-full relative"
             >
               {/* Horizontal side-scrolling wheel showcase */}
@@ -708,10 +734,14 @@ export function SavedTyresCarousel({
               {/* Active Tyre Price, Name, Axle & Size */}
               {activeTyre && (
                 <div className="mt-1.5 px-6 text-center">
-                  <p className="font-display text-2xl sm:text-[26px] font-bold tracking-tight tabular-nums text-[#111315] leading-none">
-                    {formatPriceRM(activeTyre.price)}
-                  </p>
-                  <h3 className="mt-1 font-display text-[15px] sm:text-base font-medium text-[#111315] leading-snug text-balance">
+                  {activeTyre.price > 0 && (
+                    <p className="font-display text-2xl sm:text-[26px] font-bold tracking-tight tabular-nums text-[#111315] leading-none">
+                      {formatPriceRM(activeTyre.price)}
+                    </p>
+                  )}
+                  <h3
+                    className={`${activeTyre.price > 0 ? 'mt-1' : ''} font-display text-[15px] sm:text-base font-medium text-[#111315] leading-snug text-balance`}
+                  >
                     {activeTyre.brandModel}
                   </h3>
                   <p className="mt-0.5 flex items-center justify-center gap-1.5 text-xs text-[#5E646A] tabular-nums">
@@ -729,28 +759,6 @@ export function SavedTyresCarousel({
                     </p>
                   )}
 
-                  <div className="mt-1.5 flex items-center justify-center gap-4 text-xs text-[#5E646A]">
-                    <button
-                      type="button"
-                      onClick={openAddModal}
-                      className="min-h-[36px] px-2 inline-flex items-center gap-1 font-medium text-[#111315] hover:text-[#FF5A1F] transition-colors cursor-pointer"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Save tyre</span>
-                    </button>
-                    <span aria-hidden="true" className="text-[#C5C8C4]">
-                      |
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => openEditModal(activeTyre)}
-                      className="min-h-[36px] px-2 inline-flex items-center gap-1 font-medium text-[#5E646A] hover:text-[#111315] transition-colors cursor-pointer"
-                    >
-                      <Pencil className="w-3 h-3" />
-                      <span>Edit</span>
-                    </button>
-                  </div>
-
                   {rulesPending && (
                     <p className="mt-1 text-[11px] text-[#991B1B]">
                       Publish the savedTyres Firestore rule to sync edits.
@@ -759,8 +767,8 @@ export function SavedTyresCarousel({
                 </div>
               )}
             </motion.div>
-          </AnimatePresence>
-        )}
+          )}
+        </AnimatePresence>
       </motion.section>
 
       {/* Add / Edit Saved Tyre Option Modal (portaled above BottomNav) */}
@@ -909,12 +917,11 @@ export function SavedTyresCarousel({
                   </label>
                   <input
                     type="number"
-                    required
                     min="0"
                     step="0.01"
                     value={price}
                     onChange={(e) => setPrice(e.target.value)}
-                    placeholder="259"
+                    placeholder="Optional"
                     className="w-full min-h-[42px] px-3 py-2 rounded-xl bg-[#F3F4F2] border border-black/8 font-mono text-sm text-[#111315] focus:outline-none focus:ring-2 focus:ring-[#111315]"
                   />
                 </div>

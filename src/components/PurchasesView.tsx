@@ -92,6 +92,51 @@ function WhatsAppIcon({ className = 'w-4 h-4' }: { className?: string }) {
   );
 }
 
+function ClockwiseCardGlow() {
+  return (
+    <motion.div
+      aria-hidden="true"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: [0.76, 1, 0.76] }}
+      exit={{ opacity: 0 }}
+      transition={{
+        opacity: { duration: 2.4, repeat: Infinity, ease: 'easeInOut' },
+      }}
+      className="pointer-events-none absolute inset-0"
+    >
+      {/* Long clockwise-sweeping outer halo: bright leading front tapering smoothly backward */}
+      <div className="absolute -inset-[3.5px] rounded-[19px] overflow-hidden blur-[7px]">
+        <div className="absolute inset-0 flex items-center justify-center">
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ duration: 3.6, repeat: Infinity, ease: 'linear' }}
+            style={{
+              background:
+                'conic-gradient(from 0deg, transparent 0deg, rgba(255,90,31,0.06) 55deg, rgba(255,90,31,0.16) 125deg, rgba(255,90,31,0.3) 195deg, rgba(255,90,31,0.48) 260deg, rgba(255,112,52,0.7) 312deg, rgba(255,172,118,0.88) 342deg, rgba(255,120,64,0.42) 354deg, transparent 360deg)',
+            }}
+            className="w-[180%] aspect-square shrink-0"
+          />
+        </div>
+      </div>
+
+      {/* Crisp long tapered perimeter edge highlight */}
+      <div className="absolute -inset-[1.5px] rounded-[17px] overflow-hidden">
+        <div className="absolute inset-0 flex items-center justify-center">
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ duration: 3.6, repeat: Infinity, ease: 'linear' }}
+            style={{
+              background:
+                'conic-gradient(from 0deg, rgba(255,90,31,0.08) 0deg, rgba(255,90,31,0.12) 55deg, rgba(255,90,31,0.22) 125deg, rgba(255,90,31,0.36) 195deg, rgba(255,90,31,0.56) 260deg, rgba(255,118,58,0.78) 312deg, rgba(255,196,154,0.96) 342deg, rgba(255,130,72,0.46) 354deg, rgba(255,90,31,0.08) 360deg)',
+            }}
+            className="w-[180%] aspect-square shrink-0"
+          />
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
 function findMatchingContact(
   vendor: string,
   contacts: TyreContact[]
@@ -340,7 +385,7 @@ export function PurchasesView({
   onExpandedChange,
 }: PurchasesViewProps) {
   const [showContactModal, setShowContactModal] = useState(false);
-  const [purchaseLogExpanded, setPurchaseLogExpanded] = useState(true);
+  const [purchaseLogExpanded, setPurchaseLogExpanded] = useState(false);
   const [installationsExpanded, setInstallationsExpanded] = useState(false);
   const [contactsExpanded, setContactsExpanded] = useState(false);
   const [focusedAxle, setFocusedAxle] = useState<TyreAxle | null>(null);
@@ -877,48 +922,17 @@ export function PurchasesView({
                   focusedAxle === 'Back' ? 'pointer-events-none' : ''
                 }`}
               >
-                {focusedAxle === 'Front' && (
-                  <motion.div
-                    aria-hidden="true"
-                    initial={{ opacity: 0.16, scale: 0.995 }}
-                    animate={{
-                      opacity: [0.16, 0.42, 0.16],
-                      scale: [0.995, 1.008, 0.995],
-                    }}
-                    transition={{
-                      duration: 2.0,
-                      repeat: Infinity,
-                      ease: 'easeInOut',
-                    }}
-                    className="pointer-events-none absolute -inset-1 rounded-[20px] bg-gradient-to-r from-[#FF5A1F]/28 via-[#FF8A4C]/18 to-[#FF5A1F]/28 blur-[8px]"
-                  />
-                )}
-                <motion.button
+                {focusedAxle === 'Front' && <ClockwiseCardGlow />}
+                <button
                   type="button"
                   data-focus-interactive="true"
                   onClick={() => handleToggleAxleFocus('Front')}
                   aria-pressed={focusedAxle === 'Front'}
-                  animate={{
-                    boxShadow:
-                      focusedAxle === 'Front'
-                        ? [
-                            '0 4px 14px rgba(17,19,21,0.16), 0 0 8px rgba(255,90,31,0.12), 0 0 0 1px rgba(255,90,31,0.22)',
-                            '0 8px 20px rgba(17,19,21,0.22), 0 0 16px rgba(255,90,31,0.28), 0 0 0 1px rgba(255,90,31,0.45)',
-                          ]
-                        : '0 2px 8px rgba(17,19,21,0.08), 0 0 0px rgba(255,90,31,0), 0 0 0 0px rgba(255,90,31,0)',
-                  }}
-                  transition={{
-                    boxShadow:
-                      focusedAxle === 'Front'
-                        ? {
-                            duration: 2.0,
-                            repeat: Infinity,
-                            repeatType: 'reverse',
-                            ease: 'easeInOut',
-                          }
-                        : { duration: 0.24 },
-                  }}
-                  className={`relative z-10 w-full overflow-hidden text-left rounded-2xl bg-[#16191D] text-white cursor-pointer transition-colors hover:bg-[#1E2228] focus:outline-none ${
+                  className={`relative z-10 w-full overflow-hidden text-left rounded-2xl bg-[#16191D] text-white cursor-pointer transition-all hover:bg-[#1E2228] focus:outline-none ${
+                    focusedAxle === 'Front'
+                      ? 'shadow-[0_6px_18px_rgba(17,19,21,0.2)]'
+                      : 'shadow-[0_2px_8px_rgba(17,19,21,0.08)]'
+                  } ${
                     focusedAxle === 'Back' ? 'p-0' : 'p-3.5'
                   }`}
                 >
@@ -939,7 +953,7 @@ export function PurchasesView({
                   <span className="mt-1 font-mono text-[12.5px] sm:text-sm font-semibold text-white whitespace-nowrap block">
                     {car.defaultSizes.front}
                   </span>
-                </motion.button>
+                </button>
               </motion.div>
 
               <motion.div
@@ -962,48 +976,17 @@ export function PurchasesView({
                   focusedAxle === 'Front' ? 'pointer-events-none' : ''
                 }`}
               >
-                {focusedAxle === 'Back' && (
-                  <motion.div
-                    aria-hidden="true"
-                    initial={{ opacity: 0.16, scale: 0.995 }}
-                    animate={{
-                      opacity: [0.16, 0.42, 0.16],
-                      scale: [0.995, 1.008, 0.995],
-                    }}
-                    transition={{
-                      duration: 2.0,
-                      repeat: Infinity,
-                      ease: 'easeInOut',
-                    }}
-                    className="pointer-events-none absolute -inset-1 rounded-[20px] bg-gradient-to-r from-[#FF5A1F]/28 via-[#FF8A4C]/18 to-[#FF5A1F]/28 blur-[8px]"
-                  />
-                )}
-                <motion.button
+                {focusedAxle === 'Back' && <ClockwiseCardGlow />}
+                <button
                   type="button"
                   data-focus-interactive="true"
                   onClick={() => handleToggleAxleFocus('Back')}
                   aria-pressed={focusedAxle === 'Back'}
-                  animate={{
-                    boxShadow:
-                      focusedAxle === 'Back'
-                        ? [
-                            '0 4px 14px rgba(17,19,21,0.16), 0 0 8px rgba(255,90,31,0.12), 0 0 0 1px rgba(255,90,31,0.22)',
-                            '0 8px 20px rgba(17,19,21,0.22), 0 0 16px rgba(255,90,31,0.28), 0 0 0 1px rgba(255,90,31,0.45)',
-                          ]
-                        : '0 2px 8px rgba(17,19,21,0.08), 0 0 0px rgba(255,90,31,0), 0 0 0 0px rgba(255,90,31,0)',
-                  }}
-                  transition={{
-                    boxShadow:
-                      focusedAxle === 'Back'
-                        ? {
-                            duration: 2.0,
-                            repeat: Infinity,
-                            repeatType: 'reverse',
-                            ease: 'easeInOut',
-                          }
-                        : { duration: 0.24 },
-                  }}
-                  className={`relative z-10 w-full overflow-hidden text-left rounded-2xl bg-[#16191D] text-white cursor-pointer transition-colors hover:bg-[#1E2228] focus:outline-none ${
+                  className={`relative z-10 w-full overflow-hidden text-left rounded-2xl bg-[#16191D] text-white cursor-pointer transition-all hover:bg-[#1E2228] focus:outline-none ${
+                    focusedAxle === 'Back'
+                      ? 'shadow-[0_6px_18px_rgba(17,19,21,0.2)]'
+                      : 'shadow-[0_2px_8px_rgba(17,19,21,0.08)]'
+                  } ${
                     focusedAxle === 'Front' ? 'p-0' : 'p-3.5'
                   }`}
                 >
@@ -1024,7 +1007,7 @@ export function PurchasesView({
                   <span className="mt-1 font-mono text-[12.5px] sm:text-sm font-semibold text-white whitespace-nowrap block">
                     {car.defaultSizes.rear}
                   </span>
-                </motion.button>
+                </button>
               </motion.div>
             </div>
           </section>
@@ -1050,9 +1033,17 @@ export function PurchasesView({
           )}
         </AnimatePresence>
 
-        {/* Bottom Stacked Drawers: Hidden while an axle is focused; Purchase log + Installation + Contacts */}
-        {focusedAxle === null && (
-          <div className="mt-3 px-1.5 sm:px-3">
+        {/* Bottom Stacked Drawers: Hidden smoothly while an axle is focused; Purchase log + Installation + Contacts */}
+        <AnimatePresence initial={false}>
+          {focusedAxle === null && (
+            <motion.div
+              key="bottom-stacked-drawers"
+              initial={{ opacity: 0, y: 24, height: 0 }}
+              animate={{ opacity: 1, y: 0, height: 'auto' }}
+              exit={{ opacity: 0, y: 20, height: 0 }}
+              transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+              className="mt-3 px-1.5 sm:px-3 overflow-hidden"
+            >
           {/* Purchase History Logs (Expanded by default, collapses down to stack above Installation by Tyre) */}
           <section
             className={`relative z-0 overflow-hidden transition-all duration-300 rounded-t-3xl rounded-b-none ring-1 ring-black/[0.05] ${
@@ -1511,8 +1502,9 @@ export function PurchasesView({
               )}
             </AnimatePresence>
           </section>
-        </div>
-        )}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </motion.div>
 
       {/* Add Modal: Drops down from top below header, portaled above BottomNav */}

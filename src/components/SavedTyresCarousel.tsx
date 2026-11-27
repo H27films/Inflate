@@ -9,6 +9,7 @@ import {
   SavedTyreOption,
   TyreAxle,
   TyreContact,
+  TyreCorner,
   WheelImageKey,
 } from '../types';
 import { formatDisplayDate, getCarTyreSizingOptions } from '../data/initialGarage';
@@ -125,14 +126,26 @@ function formatPriceRM(amount: number): string {
   })}`;
 }
 
+export type TyreSide = 'Left' | 'Right';
+
+export interface FocusedSideOption {
+  side: TyreSide;
+  corner: TyreCorner;
+  purchase: PurchaseLogEntry | null;
+  contact?: TyreContact | null;
+}
+
 interface SavedTyresCarouselProps {
   car: CarProfile;
   tyres: SavedTyreOption[];
   focusedAxle?: TyreAxle | null;
   focusedPurchase?: PurchaseLogEntry | null;
   focusedContact?: TyreContact | null;
+  focusedSides?: FocusedSideOption[] | null;
+  focusedSide?: TyreSide;
+  onFocusedSideChange?: (side: TyreSide) => void;
   onNavigateToContact?: (vendor: string, contact?: TyreContact | null) => void;
-  onAddPurchaseForAxle?: (axle: TyreAxle) => void;
+  onAddPurchaseForAxle?: (target: TyreAxle | TyreCorner) => void;
   rulesPending?: boolean;
   onAddTyre: (entry: Omit<SavedTyreOption, 'id'>) => Promise<void> | void;
   onUpdateTyre: (id: string, entry: Omit<SavedTyreOption, 'id'>) => Promise<void> | void;
@@ -145,6 +158,9 @@ export function SavedTyresCarousel({
   focusedAxle = null,
   focusedPurchase = null,
   focusedContact = null,
+  focusedSides = null,
+  focusedSide = 'Left',
+  onFocusedSideChange,
   onNavigateToContact,
   onAddPurchaseForAxle,
   rulesPending = false,
@@ -160,6 +176,13 @@ export function SavedTyresCarousel({
   const prevFocusedAxleRef = useRef<TyreAxle | null>(focusedAxle);
   const activeIndexRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Focused split Left/Right scroller refs
+  const focusScrollerRef = useRef<HTMLDivElement | null>(null);
+  const focusItemRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const focusScrollRafRef = useRef<number | null>(null);
+  const focusIsProgrammaticRef = useRef(false);
+  const focusProgrammaticTimerRef = useRef<number | null>(null);
 
   const [activeIndex, setActiveIndex] = useState(0);
   const [modalOpen, setModalOpen] = useState(false);
@@ -206,39 +229,140 @@ export function SavedTyresCarousel({
     }
   }, [sortedTyres.length, activeIndex]);
 
-  const focusedTyre = useMemo<SavedTyreOption | null>(() => {
-    if (!focusedAxle || !focusedPurchase) return null;
-    const targetBrand = focusedPurchase.brandModel.trim().toLowerCase();
-    const targetTokens = targetBrand.split(/\s+/).filter(Boolean);
-    const isBrandMatch = (candidate: SavedTyreOption) => {
-      const b = candidate.brandModel.trim().toLowerCase();
-      return (
-        b === targetBrand ||
-        b.includes(targetBrand) ||
-        targetBrand.includes(b) ||
-        (targetTokens[0] ? b.includes(targetTokens[0]) : false)
+  const resolveFocusedTyreForPurchase = useCallback(
+    (purchase: PurchaseLogEntry | null): SavedTyreOption | null => {
+      if (!focusedAxle || !purchase) return null;
+      const targetBrand = purchase.brandModel.trim().toLowerCase();
+      const targetTokens = targetBrand.split(/\s+/).filter(Boolean);
+      const isBrandMatch = (candidate: SavedTyreOption) => {
+        const b = candidate.brandModel.trim().toLowerCase();
+        return (
+          b === targetBrand ||
+          b.includes(targetBrand) ||
+          targetBrand.includes(b) ||
+          (targetTokens[0] ? b.includes(targetTokens[0]) : false)
+        );
+      };
+      const exactAxleMatch = sortedTyres.find(
+        (t) => t.axle === focusedAxle && isBrandMatch(t)
       );
-    };
-    const exactAxleMatch = sortedTyres.find(
-      (t) => t.axle === focusedAxle && isBrandMatch(t)
-    );
-    if (exactAxleMatch) return exactAxleMatch;
-    const anyAxleMatch = sortedTyres.find(isBrandMatch);
-    if (anyAxleMatch) return anyAxleMatch;
+      if (exactAxleMatch) return exactAxleMatch;
+      const anyAxleMatch = sortedTyres.find(isBrandMatch);
+      if (anyAxleMatch) return anyAxleMatch;
 
-    const perTyre =
-      focusedPurchase.corners.length > 0
-        ? Math.round((focusedPurchase.totalCost / focusedPurchase.corners.length) * 100) / 100
-        : focusedPurchase.totalCost;
-    return {
-      id: `focused-${focusedPurchase.id}`,
-      brandModel: focusedPurchase.brandModel,
-      price: perTyre,
-      axle: focusedAxle,
-      tyreSize: focusedPurchase.tyreSize,
-      wheelImageKey: car.bodyStyle === 'suv' ? 'all-terrain' : 'sport-5spoke',
-    };
-  }, [focusedAxle, focusedPurchase, sortedTyres, car.bodyStyle]);
+      const perTyre =
+        purchase.corners.length > 0
+          ? Math.round((purchase.totalCost / purchase.corners.length) * 100) / 100
+          : purchase.totalCost;
+      return {
+        id: `focused-${purchase.id}`,
+        brandModel: purchase.brandModel,
+        price: perTyre,
+        axle: focusedAxle,
+        tyreSize: purchase.tyreSize,
+        wheelImageKey: car.bodyStyle === 'suv' ? 'all-terrain' : 'sport-5spoke',
+      };
+    },
+    [focusedAxle, sortedTyres, car.bodyStyle]
+  );
+
+  const focusedTyre = useMemo<SavedTyreOption | null>(
+    () => resolveFocusedTyreForPurchase(focusedPurchase),
+    [resolveFocusedTyreForPurchase, focusedPurchase]
+  );
+
+  const focusedSplitItems = useMemo(() => {
+    if (!focusedAxle || !focusedSides || focusedSides.length !== 2) return null;
+    return focusedSides.map((s) => ({
+      ...s,
+      tyre: resolveFocusedTyreForPurchase(s.purchase),
+    }));
+  }, [focusedAxle, focusedSides, resolveFocusedTyreForPurchase]);
+
+  const focusedSplitActiveIdx = focusedSide === 'Right' ? 1 : 0;
+
+  const releaseFocusProgrammaticLock = useCallback(() => {
+    focusIsProgrammaticRef.current = false;
+    if (focusProgrammaticTimerRef.current !== null) {
+      window.clearTimeout(focusProgrammaticTimerRef.current);
+      focusProgrammaticTimerRef.current = null;
+    }
+    if (focusScrollerRef.current) {
+      focusScrollerRef.current.style.scrollSnapType = '';
+    }
+  }, []);
+
+  const scrollFocusToIndex = useCallback(
+    (index: number, behavior: ScrollBehavior = 'smooth') => {
+      const clampedIdx = index === 1 ? 1 : 0;
+      const nextSide: TyreSide = clampedIdx === 1 ? 'Right' : 'Left';
+      onFocusedSideChange?.(nextSide);
+
+      const container = focusScrollerRef.current;
+      const target = focusItemRefs.current[clampedIdx];
+      if (!container || !target) return;
+
+      const containerCenter = container.clientWidth / 2;
+      const targetCenter = target.offsetLeft + target.offsetWidth / 2;
+      const nextLeft = Math.max(0, targetCenter - containerCenter);
+
+      if (focusProgrammaticTimerRef.current !== null) {
+        window.clearTimeout(focusProgrammaticTimerRef.current);
+      }
+
+      if (behavior === 'smooth') {
+        focusIsProgrammaticRef.current = true;
+        container.style.scrollSnapType = 'none';
+        container.scrollTo({ left: nextLeft, behavior: 'smooth' });
+        focusProgrammaticTimerRef.current = window.setTimeout(() => {
+          focusIsProgrammaticRef.current = false;
+          if (focusScrollerRef.current) {
+            focusScrollerRef.current.style.scrollSnapType = '';
+          }
+          focusProgrammaticTimerRef.current = null;
+        }, 420);
+      } else {
+        focusIsProgrammaticRef.current = false;
+        container.style.scrollSnapType = '';
+        container.scrollTo({ left: nextLeft, behavior: 'auto' });
+      }
+    },
+    [onFocusedSideChange]
+  );
+
+  const handleFocusScroll = () => {
+    if (focusIsProgrammaticRef.current) return;
+    if (focusScrollRafRef.current !== null) {
+      cancelAnimationFrame(focusScrollRafRef.current);
+    }
+    focusScrollRafRef.current = requestAnimationFrame(() => {
+      if (focusIsProgrammaticRef.current) return;
+      const container = focusScrollerRef.current;
+      if (!container) return;
+      const centerX = container.scrollLeft + container.clientWidth / 2;
+      let closestIdx = 0;
+      let closestDist = Number.POSITIVE_INFINITY;
+      [0, 1].forEach((idx) => {
+        const el = focusItemRefs.current[idx];
+        if (!el) return;
+        const elCenter = el.offsetLeft + el.offsetWidth / 2;
+        const dist = Math.abs(elCenter - centerX);
+        if (dist < closestDist) {
+          closestDist = dist;
+          closestIdx = idx;
+        }
+      });
+      onFocusedSideChange?.(closestIdx === 1 ? 'Right' : 'Left');
+    });
+  };
+
+  useEffect(() => {
+    if (!focusedAxle || !focusedSplitItems) return;
+    const t = window.setTimeout(() => {
+      scrollFocusToIndex(focusedSide === 'Right' ? 1 : 0, 'auto');
+    }, 24);
+    return () => window.clearTimeout(t);
+  }, [focusedAxle, Boolean(focusedSplitItems)]);
 
   useEffect(() => {
     activeIndexRef.current = activeIndex;
@@ -335,6 +459,12 @@ export function SavedTyresCarousel({
       }
       if (programmaticTimerRef.current !== null) {
         window.clearTimeout(programmaticTimerRef.current);
+      }
+      if (focusScrollRafRef.current !== null) {
+        cancelAnimationFrame(focusScrollRafRef.current);
+      }
+      if (focusProgrammaticTimerRef.current !== null) {
+        window.clearTimeout(focusProgrammaticTimerRef.current);
       }
     };
   }, []);
@@ -478,7 +608,258 @@ export function SavedTyresCarousel({
         className="w-full my-auto py-2 flex flex-col items-center justify-center"
       >
         <AnimatePresence mode="wait" initial={false}>
-          {focusedAxle && !focusedTyre ? (
+          {focusedAxle && focusedSplitItems ? (
+            <motion.div
+              key={`focus-split-${focusedAxle}`}
+              initial={{ opacity: 0, scale: 0.92, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.94, y: -8 }}
+              transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+              className="w-full relative flex flex-col items-center"
+            >
+              {/* Horizontal Left / Right scroll showcase when sides differ */}
+              <div data-focus-interactive="true" className="relative w-full flex items-center">
+                {focusedSplitActiveIdx > 0 && (
+                  <button
+                    type="button"
+                    data-focus-interactive="true"
+                    onClick={() => scrollFocusToIndex(0)}
+                    aria-label={`View ${focusedAxle} Left tyre`}
+                    className="hidden sm:flex absolute left-4 z-10 w-10 h-10 rounded-full bg-white/80 hover:bg-white border border-black/8 shadow-[0_2px_10px_rgba(17,19,21,0.06)] items-center justify-center text-[#111315] transition-all cursor-pointer"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                )}
+
+                <div
+                  ref={focusScrollerRef}
+                  data-focus-interactive="true"
+                  onScroll={handleFocusScroll}
+                  onTouchStart={releaseFocusProgrammaticLock}
+                  onWheel={releaseFocusProgrammaticLock}
+                  className="w-full overflow-x-auto snap-x snap-mandatory flex items-center px-[calc(50%-86px)] sm:px-[calc(50%-96px)] py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                >
+                  {focusedSplitItems.map((sideItem, idx) => {
+                    const isActive = idx === focusedSplitActiveIdx;
+                    const sideTyre = sideItem.tyre;
+                    const imgBroken = sideTyre
+                      ? failedImages[`faceon-${sideItem.side}-${sideTyre.id}`]
+                      : false;
+
+                    return (
+                      <div
+                        key={sideItem.corner}
+                        ref={(el) => {
+                          focusItemRefs.current[idx] = el;
+                        }}
+                        data-focus-interactive="true"
+                        className="snap-center shrink-0 w-[172px] sm:w-[192px] flex items-center justify-center"
+                      >
+                        {sideTyre ? (
+                          <button
+                            type="button"
+                            data-focus-interactive="true"
+                            onClick={() => scrollFocusToIndex(idx)}
+                            aria-label={`Select ${focusedAxle} ${sideItem.side} tyre`}
+                            className="w-[164px] h-[164px] sm:w-[184px] sm:h-[184px] flex items-center justify-center focus:outline-none cursor-pointer"
+                          >
+                            <div
+                              className={`w-full h-full flex items-center justify-center transition-all duration-200 ${
+                                isActive
+                                  ? 'scale-100 opacity-100'
+                                  : 'scale-[0.72] opacity-40 hover:opacity-70'
+                              }`}
+                            >
+                              {imgBroken ? (
+                                <div className="w-full h-full rounded-full bg-[#E5E7E3] flex items-center justify-center text-xs font-medium text-[#5E646A]">
+                                  Tyre
+                                </div>
+                              ) : (
+                                <img
+                                  src={resolveFaceOnTyreImage(car.id, sideTyre)}
+                                  alt={`${sideTyre.brandModel} (${focusedAxle} ${sideItem.side})`}
+                                  referrerPolicy="no-referrer"
+                                  draggable={false}
+                                  onError={() =>
+                                    setFailedImages((prev) => ({
+                                      ...prev,
+                                      [`faceon-${sideItem.side}-${sideTyre.id}`]: true,
+                                    }))
+                                  }
+                                  className="w-full h-full object-contain select-none pointer-events-none"
+                                />
+                              )}
+                            </div>
+                          </button>
+                        ) : (
+                          <div
+                            onClick={() => {
+                              if (!isActive) scrollFocusToIndex(idx);
+                            }}
+                            className={`w-[164px] h-[164px] sm:w-[184px] sm:h-[184px] flex flex-col items-center justify-center transition-all duration-200 ${
+                              isActive
+                                ? 'scale-100 opacity-100'
+                                : 'scale-[0.72] opacity-40 hover:opacity-70 cursor-pointer'
+                            }`}
+                          >
+                            <button
+                              type="button"
+                              data-focus-interactive="true"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (!isActive) {
+                                  scrollFocusToIndex(idx);
+                                } else {
+                                  onAddPurchaseForAxle?.(sideItem.corner);
+                                }
+                              }}
+                              aria-label={`Add tyre for ${focusedAxle} ${sideItem.side}`}
+                              className="w-16 h-16 rounded-full bg-[#111315] text-white hover:bg-black/85 active:scale-[0.96] shadow-[0_6px_18px_rgba(17,19,21,0.16)] flex items-center justify-center transition-all cursor-pointer"
+                            >
+                              <Plus className="w-6 h-6" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {focusedSplitActiveIdx < 1 && (
+                  <button
+                    type="button"
+                    data-focus-interactive="true"
+                    onClick={() => scrollFocusToIndex(1)}
+                    aria-label={`View ${focusedAxle} Right tyre`}
+                    className="hidden sm:flex absolute right-4 z-10 w-10 h-10 rounded-full bg-white/80 hover:bg-white border border-black/8 shadow-[0_2px_10px_rgba(17,19,21,0.06)] items-center justify-center text-[#111315] transition-all cursor-pointer"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+
+              {/* Left / Right selector dots */}
+              <div
+                data-focus-interactive="true"
+                className="mt-1 flex items-center justify-center gap-2.5"
+              >
+                <button
+                  type="button"
+                  data-focus-interactive="true"
+                  onClick={() => scrollFocusToIndex(0)}
+                  className={`text-[11px] transition-colors cursor-pointer ${
+                    focusedSplitActiveIdx === 0
+                      ? 'font-semibold text-[#111315]'
+                      : 'font-medium text-[#5E646A]/65 hover:text-[#111315]'
+                  }`}
+                >
+                  Left
+                </button>
+                <div className="flex items-center gap-1">
+                  {focusedSplitItems.map((sideItem, idx) => {
+                    const isActive = idx === focusedSplitActiveIdx;
+                    return (
+                      <button
+                        key={sideItem.side}
+                        type="button"
+                        data-focus-interactive="true"
+                        onClick={() => scrollFocusToIndex(idx)}
+                        aria-label={`Select ${focusedAxle} ${sideItem.side}`}
+                        className="p-1 flex items-center justify-center cursor-pointer"
+                      >
+                        <span
+                          className={`block rounded-full transition-all duration-200 ${
+                            isActive
+                              ? 'w-2 h-2 bg-[#111315]'
+                              : 'w-1.5 h-1.5 bg-[#111315]/22 hover:bg-[#111315]/45'
+                          }`}
+                        />
+                      </button>
+                    );
+                  })}
+                </div>
+                <button
+                  type="button"
+                  data-focus-interactive="true"
+                  onClick={() => scrollFocusToIndex(1)}
+                  className={`text-[11px] transition-colors cursor-pointer ${
+                    focusedSplitActiveIdx === 1
+                      ? 'font-semibold text-[#111315]'
+                      : 'font-medium text-[#5E646A]/65 hover:text-[#111315]'
+                  }`}
+                >
+                  Right
+                </button>
+              </div>
+
+              {/* Selected Side Info */}
+              {(() => {
+                const activeSideItem = focusedSplitItems[focusedSplitActiveIdx];
+                if (!activeSideItem) return null;
+                const activeSideTyre = activeSideItem.tyre;
+                const activeSidePurchase = activeSideItem.purchase;
+                const sidePositionLabel = `${focusedAxle} ${activeSideItem.side}`;
+
+                if (!activeSideTyre || !activeSidePurchase) {
+                  return (
+                    <div className="mt-2 px-6 text-center">
+                      <p className="font-display text-base font-semibold text-[#111315]">
+                        No tyre selected
+                      </p>
+                      <p className="mt-0.5 text-xs text-[#5E646A]">
+                        Tap + to add {sidePositionLabel.toLowerCase()} tyre
+                      </p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="mt-2 px-6 text-center">
+                    {activeSideTyre.price > 0 && (
+                      <p className="font-display text-2xl sm:text-[26px] font-bold tracking-tight tabular-nums text-[#111315] leading-none">
+                        {formatPriceRM(activeSideTyre.price)}
+                      </p>
+                    )}
+                    <h3
+                      className={`${activeSideTyre.price > 0 ? 'mt-1' : ''} font-display text-[15px] sm:text-base font-medium text-[#111315] leading-snug text-balance`}
+                    >
+                      {activeSideTyre.brandModel}
+                    </h3>
+                    <p className="mt-0.5 flex items-center justify-center gap-1.5 text-xs text-[#5E646A] tabular-nums">
+                      <span className="font-semibold text-[#111315]">
+                        {sidePositionLabel}
+                      </span>
+                      <span aria-hidden="true" className="text-[#9AA0A6]">
+                        ·
+                      </span>
+                      <span className="font-mono">{activeSideTyre.tyreSize}</span>
+                    </p>
+
+                    <div className="mt-3 pt-2.5 border-t border-black/8 flex flex-col items-center gap-1.5 max-w-xs mx-auto">
+                      <button
+                        type="button"
+                        data-focus-interactive="true"
+                        onClick={() =>
+                          onNavigateToContact?.(
+                            activeSidePurchase.vendor,
+                            activeSideItem.contact
+                          )
+                        }
+                        className="inline-flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium text-[#111315] hover:bg-black/[0.05] hover:text-[#FF5A1F] active:scale-[0.98] transition-all cursor-pointer"
+                      >
+                        <Store className="w-3.5 h-3.5 shrink-0 text-[#5E646A]" />
+                        <span>{activeSidePurchase.vendor}</span>
+                      </button>
+                      <p className="inline-flex items-center justify-center gap-1.5 text-[11px] text-[#5E646A] tabular-nums">
+                        <Calendar className="w-3 h-3 shrink-0 text-[#8C9298]" />
+                        <span>Purchased {formatDisplayDate(activeSidePurchase.date)}</span>
+                      </p>
+                    </div>
+                  </div>
+                );
+              })()}
+            </motion.div>
+          ) : focusedAxle && !focusedTyre ? (
             <motion.div
               key={`focus-empty-${focusedAxle}`}
               initial={{ opacity: 0, scale: 0.9, y: 12 }}

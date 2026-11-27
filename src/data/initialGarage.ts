@@ -406,6 +406,26 @@ export function formatTyreAgeMonths(dateStr: string): string {
   return months === 1 ? '1month' : `${months}months`;
 }
 
+export function formatTyreAgeMonthsOrWeeks(dateStr: string): string {
+  const today = new Date();
+  const bought = parseLocalDate(dateStr);
+  let months =
+    (today.getFullYear() - bought.getFullYear()) * 12 +
+    (today.getMonth() - bought.getMonth());
+  if (today.getDate() < bought.getDate()) {
+    months -= 1;
+  }
+  if (months >= 1) {
+    return `${months} ${months === 1 ? 'month' : 'months'}`;
+  }
+  const diffDays = getDaysSince(dateStr);
+  if (diffDays <= 0) {
+    return 'New';
+  }
+  const weeks = Math.max(1, Math.floor(diffDays / 7));
+  return `${weeks} ${weeks === 1 ? 'week' : 'weeks'}`;
+}
+
 export function getCornerPurchaseInfo(
   purchaseLogs: PurchaseLogEntry[],
   corner: TyreCorner

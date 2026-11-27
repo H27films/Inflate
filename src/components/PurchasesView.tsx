@@ -16,7 +16,7 @@ import {
 import {
   formatDisplayDate,
   formatTyreAge,
-  formatTyreAgeMonths,
+  formatTyreAgeMonthsOrWeeks,
   getCarTyreSizingOptions,
   getCornerPurchaseInfo,
   getTodayIso,
@@ -27,7 +27,12 @@ import {
   buildCanonicalTyreImageFileName,
   uploadCustomTyrePngToFirebaseStorage,
 } from '../services/garageFirestore';
-import { SavedTyresCarousel, WHEEL_STYLE_OPTIONS } from './SavedTyresCarousel';
+import {
+  FocusedSideOption,
+  SavedTyresCarousel,
+  TyreSide,
+  WHEEL_STYLE_OPTIONS,
+} from './SavedTyresCarousel';
 
 interface PurchasesViewProps {
   car: CarProfile;
@@ -389,6 +394,7 @@ export function PurchasesView({
   const [installationsExpanded, setInstallationsExpanded] = useState(false);
   const [contactsExpanded, setContactsExpanded] = useState(false);
   const [focusedAxle, setFocusedAxle] = useState<TyreAxle | null>(null);
+  const [focusedSide, setFocusedSide] = useState<TyreSide>('Left');
 
   const allCollapsed =
     !purchaseLogExpanded && !installationsExpanded && !contactsExpanded;
@@ -399,6 +405,7 @@ export function PurchasesView({
 
   useEffect(() => {
     setFocusedAxle(null);
+    setFocusedSide('Left');
   }, [car.id]);
 
   useEffect(() => {
@@ -430,7 +437,7 @@ export function PurchasesView({
   const pendingContactScrollRef = useRef<string | null>(null);
   const contactsSectionRef = useRef<HTMLElement | null>(null);
   const installationsSectionRef = useRef<HTMLElement | null>(null);
-  const pendingPresetAxleRef = useRef<TyreAxle | null>(null);
+  const pendingPresetAxleRef = useRef<TyreAxle | TyreCorner | null>(null);
 
   // Add (+) modal state: 'choose' -> 'purchase' | 'tyre'
   const [addMode, setAddMode] = useState<'choose' | 'purchase' | 'tyre'>('choose');
@@ -481,22 +488,31 @@ export function PurchasesView({
 
   useEffect(() => {
     if (addModalOpen) {
-      const presetAxle = pendingPresetAxleRef.current;
+      const presetTarget = pendingPresetAxleRef.current;
       pendingPresetAxleRef.current = null;
-      setAddMode(presetAxle ? 'purchase' : 'choose');
+      const presetIsRear =
+        presetTarget === 'Back' || presetTarget === 'RL' || presetTarget === 'RR';
+      const presetAxle: TyreAxle | null = presetTarget
+        ? presetIsRear
+          ? 'Back'
+          : 'Front'
+        : null;
+      setAddMode(presetTarget ? 'purchase' : 'choose');
       setDate(getTodayIso());
       setVendor(garageOptions[0] ?? '');
       setUseCustomGarage(garageOptions.length === 0);
       setBrandModel('');
       setTyreSize(
-        presetAxle === 'Back' ? car.defaultSizes.rear : car.defaultSizes.front
+        presetIsRear ? car.defaultSizes.rear : car.defaultSizes.front
       );
       setCorners(
-        presetAxle === 'Front'
-          ? ['FL', 'FR']
-          : presetAxle === 'Back'
-            ? ['RL', 'RR']
-            : ['FL', 'FR', 'RL', 'RR']
+        presetTarget === 'FL' || presetTarget === 'FR' || presetTarget === 'RL' || presetTarget === 'RR'
+          ? [presetTarget]
+          : presetTarget === 'Front'
+            ? ['FL', 'FR']
+            : presetTarget === 'Back'
+              ? ['RL', 'RR']
+              : ['FL', 'FR', 'RL', 'RR']
       );
       setTotalCost('');
       setNotes('');
@@ -632,30 +648,99 @@ export function PurchasesView({
     b.date.localeCompare(a.date)
   );
 
-  const getLatestAxlePurchase = (
-    cornersPair: [TyreCorner, TyreCorner]
-  ): PurchaseLogEntry | null => {
-    const first = getCornerPurchaseInfo(car.purchaseLogs, cornersPair[0]);
-    const second = getCornerPurchaseInfo(car.purchaseLogs, cornersPair[1]);
-    return first && second
-      ? first.date >= second.date
-        ? first
-        : second
-      : first ?? second ?? null;
+  const frontLeftPurchase = getCornerPurchaseInfo(car.purchaseLogs, 'FL');
+  const frontRightPurchase = getCornerPurchaseInfo(car.purchaseLogs, 'FR');
+  const rearLeftPurchase = getCornerPurchaseInfo(car.purchaseLogs, 'RL');
+  const rearRightPurchase = getCornerPurchaseInfo(car.purchaseLogs, 'RR');
+
+  const areCornerPurchasesDifferent = (
+    left: PurchaseLogEntry | null,
+    right: PurchaseLogEntry | null
+  ): boolean => {
+    if (!left && !right) return false;
+    if (!left || !right) return true;
+    if (left.id === right.id) return false;
+    return (
+      left.date !== right.date ||
+      left.brandModel.trim().toLowerCase() !== right.brandModel.trim().toLowerCase() ||
+      left.tyreSize.trim().toLowerCase() !== right.tyreSize.trim().toLowerCase() ||
+      left.vendor.trim().toLowerCase() !== right.vendor.trim().toLowerCase()
+    );
   };
 
-  const frontPurchase = getLatestAxlePurchase(['FL', 'FR']);
-  const rearPurchase = getLatestAxlePurchase(['RL', 'RR']);
-  const frontAge = frontPurchase
-    ? focusedAxle === 'Front'
-      ? formatTyreAgeMonths(frontPurchase.date)
-      : formatTyreAge(frontPurchase.date)
-    : '—';
-  const rearAge = rearPurchase
-    ? focusedAxle === 'Back'
-      ? formatTyreAgeMonths(rearPurchase.date)
-      : formatTyreAge(rearPurchase.date)
-    : '—';
+  const frontIsSplit = areCornerPurchasesDifferent(frontLeftPurchase, frontRightPurchase);
+  const rearIsSplit = areCornerPurchasesDifferent(rearLeftPurchase, rearRightPurchase);
+
+  const pickLatest = (
+    first: PurchaseLogEntry | null,
+    second: PurchaseLogEntry | null
+  ): PurchaseLogEntry | null =>
+    first && second ? (first.date >= second.date ? first : second) : first ?? second ?? null;
+
+  const frontPurchase = pickLatest(frontLeftPurchase, frontRightPurchase);
+  const rearPurchase = pickLatest(rearLeftPurchase, rearRightPurchase);
+
+  const formatCompactSplitAge = (
+    left: PurchaseLogEntry | null,
+    right: PurchaseLogEntry | null
+  ) =>
+    `${left ? formatTyreAge(left.date) : '—'} / ${right ? formatTyreAge(right.date) : '—'}`;
+
+  const frontAge = frontIsSplit
+    ? formatCompactSplitAge(frontLeftPurchase, frontRightPurchase)
+    : frontPurchase
+      ? focusedAxle === 'Front'
+        ? formatTyreAgeMonthsOrWeeks(frontPurchase.date)
+        : formatTyreAge(frontPurchase.date)
+      : '—';
+  const rearAge = rearIsSplit
+    ? formatCompactSplitAge(rearLeftPurchase, rearRightPurchase)
+    : rearPurchase
+      ? focusedAxle === 'Back'
+        ? formatTyreAgeMonthsOrWeeks(rearPurchase.date)
+        : formatTyreAge(rearPurchase.date)
+      : '—';
+
+  const focusedSides: FocusedSideOption[] | null =
+    focusedAxle === 'Front' && frontIsSplit
+      ? [
+          {
+            side: 'Left',
+            corner: 'FL',
+            purchase: frontLeftPurchase,
+            contact: frontLeftPurchase
+              ? findMatchingContact(frontLeftPurchase.vendor, contacts)
+              : undefined,
+          },
+          {
+            side: 'Right',
+            corner: 'FR',
+            purchase: frontRightPurchase,
+            contact: frontRightPurchase
+              ? findMatchingContact(frontRightPurchase.vendor, contacts)
+              : undefined,
+          },
+        ]
+      : focusedAxle === 'Back' && rearIsSplit
+        ? [
+            {
+              side: 'Left',
+              corner: 'RL',
+              purchase: rearLeftPurchase,
+              contact: rearLeftPurchase
+                ? findMatchingContact(rearLeftPurchase.vendor, contacts)
+                : undefined,
+            },
+            {
+              side: 'Right',
+              corner: 'RR',
+              purchase: rearRightPurchase,
+              contact: rearRightPurchase
+                ? findMatchingContact(rearRightPurchase.vendor, contacts)
+                : undefined,
+            },
+          ]
+        : null;
 
   const focusedPurchase =
     focusedAxle === 'Front'
@@ -675,11 +760,12 @@ export function PurchasesView({
     setPurchaseLogExpanded(false);
     setInstallationsExpanded(false);
     setContactsExpanded(false);
+    setFocusedSide('Left');
     setFocusedAxle(axle);
   };
 
-  const handleAddPurchaseForAxle = (axle: TyreAxle) => {
-    pendingPresetAxleRef.current = axle;
+  const handleAddPurchaseForAxle = (target: TyreAxle | TyreCorner) => {
+    pendingPresetAxleRef.current = target;
     setFocusedAxle(null);
     onOpenAddModal?.();
   };
@@ -936,23 +1022,62 @@ export function PurchasesView({
                     focusedAxle === 'Back' ? 'p-0' : 'p-3.5'
                   }`}
                 >
-                  <div className="flex items-baseline justify-between gap-2 min-w-0">
-                    <span
-                      className={`font-semibold whitespace-nowrap transition-all ${
-                        focusedAxle === 'Front'
-                          ? 'text-sm sm:text-[15px] text-white'
-                          : 'text-[13px] sm:text-sm text-white/80'
-                      }`}
-                    >
-                      Front (FL / FR)
-                    </span>
-                    <span className="font-display text-sm font-bold tabular-nums text-white whitespace-nowrap shrink-0">
-                      {frontAge}
-                    </span>
+                  <div className="flex items-start justify-between gap-2 min-w-0">
+                    <div className="min-w-0">
+                      <span
+                        className={`font-semibold whitespace-nowrap block transition-all ${
+                          focusedAxle === 'Front'
+                            ? 'text-sm sm:text-[15px] text-white'
+                            : 'text-[13px] sm:text-sm text-white/80'
+                        }`}
+                      >
+                        Front (FL / FR)
+                      </span>
+                      <span className="mt-1 font-mono text-[12.5px] sm:text-sm font-semibold text-white whitespace-nowrap block">
+                        {focusedAxle === 'Front' && frontIsSplit
+                          ? (focusedSide === 'Left'
+                              ? frontLeftPurchase?.tyreSize
+                              : frontRightPurchase?.tyreSize) ?? car.defaultSizes.front
+                          : car.defaultSizes.front}
+                      </span>
+                    </div>
+                    {focusedAxle === 'Front' && frontIsSplit ? (
+                      <div className="flex flex-col items-end text-right gap-0.5 shrink-0">
+                        <span
+                          className={`font-display text-xs sm:text-[13px] tabular-nums whitespace-nowrap transition-opacity duration-200 ${
+                            focusedSide === 'Left'
+                              ? 'font-bold text-white opacity-100'
+                              : 'font-medium text-white opacity-30'
+                          }`}
+                        >
+                          Left -{' '}
+                          {frontLeftPurchase
+                            ? formatTyreAgeMonthsOrWeeks(frontLeftPurchase.date)
+                            : 'None'}
+                        </span>
+                        <span
+                          className={`font-display text-xs sm:text-[13px] tabular-nums whitespace-nowrap transition-opacity duration-200 ${
+                            focusedSide === 'Right'
+                              ? 'font-bold text-white opacity-100'
+                              : 'font-medium text-white opacity-30'
+                          }`}
+                        >
+                          Right -{' '}
+                          {frontRightPurchase
+                            ? formatTyreAgeMonthsOrWeeks(frontRightPurchase.date)
+                            : 'None'}
+                        </span>
+                      </div>
+                    ) : (
+                      <span
+                        className={`font-display font-bold tabular-nums text-white whitespace-nowrap shrink-0 ${
+                          frontIsSplit ? 'text-xs sm:text-[13px]' : 'text-sm'
+                        }`}
+                      >
+                        {frontAge}
+                      </span>
+                    )}
                   </div>
-                  <span className="mt-1 font-mono text-[12.5px] sm:text-sm font-semibold text-white whitespace-nowrap block">
-                    {car.defaultSizes.front}
-                  </span>
                 </button>
               </motion.div>
 
@@ -990,23 +1115,62 @@ export function PurchasesView({
                     focusedAxle === 'Front' ? 'p-0' : 'p-3.5'
                   }`}
                 >
-                  <div className="flex items-baseline justify-between gap-2 min-w-0">
-                    <span
-                      className={`font-semibold whitespace-nowrap transition-all ${
-                        focusedAxle === 'Back'
-                          ? 'text-sm sm:text-[15px] text-white'
-                          : 'text-[13px] sm:text-sm text-white/80'
-                      }`}
-                    >
-                      Back (RL / RR)
-                    </span>
-                    <span className="font-display text-sm font-bold tabular-nums text-white whitespace-nowrap shrink-0">
-                      {rearAge}
-                    </span>
+                  <div className="flex items-start justify-between gap-2 min-w-0">
+                    <div className="min-w-0">
+                      <span
+                        className={`font-semibold whitespace-nowrap block transition-all ${
+                          focusedAxle === 'Back'
+                            ? 'text-sm sm:text-[15px] text-white'
+                            : 'text-[13px] sm:text-sm text-white/80'
+                        }`}
+                      >
+                        Back (RL / RR)
+                      </span>
+                      <span className="mt-1 font-mono text-[12.5px] sm:text-sm font-semibold text-white whitespace-nowrap block">
+                        {focusedAxle === 'Back' && rearIsSplit
+                          ? (focusedSide === 'Left'
+                              ? rearLeftPurchase?.tyreSize
+                              : rearRightPurchase?.tyreSize) ?? car.defaultSizes.rear
+                          : car.defaultSizes.rear}
+                      </span>
+                    </div>
+                    {focusedAxle === 'Back' && rearIsSplit ? (
+                      <div className="flex flex-col items-end text-right gap-0.5 shrink-0">
+                        <span
+                          className={`font-display text-xs sm:text-[13px] tabular-nums whitespace-nowrap transition-opacity duration-200 ${
+                            focusedSide === 'Left'
+                              ? 'font-bold text-white opacity-100'
+                              : 'font-medium text-white opacity-30'
+                          }`}
+                        >
+                          Left -{' '}
+                          {rearLeftPurchase
+                            ? formatTyreAgeMonthsOrWeeks(rearLeftPurchase.date)
+                            : 'None'}
+                        </span>
+                        <span
+                          className={`font-display text-xs sm:text-[13px] tabular-nums whitespace-nowrap transition-opacity duration-200 ${
+                            focusedSide === 'Right'
+                              ? 'font-bold text-white opacity-100'
+                              : 'font-medium text-white opacity-30'
+                          }`}
+                        >
+                          Right -{' '}
+                          {rearRightPurchase
+                            ? formatTyreAgeMonthsOrWeeks(rearRightPurchase.date)
+                            : 'None'}
+                        </span>
+                      </div>
+                    ) : (
+                      <span
+                        className={`font-display font-bold tabular-nums text-white whitespace-nowrap shrink-0 ${
+                          rearIsSplit ? 'text-xs sm:text-[13px]' : 'text-sm'
+                        }`}
+                      >
+                        {rearAge}
+                      </span>
+                    )}
                   </div>
-                  <span className="mt-1 font-mono text-[12.5px] sm:text-sm font-semibold text-white whitespace-nowrap block">
-                    {car.defaultSizes.rear}
-                  </span>
                 </button>
               </motion.div>
             </div>
@@ -1023,6 +1187,9 @@ export function PurchasesView({
               focusedAxle={focusedAxle}
               focusedPurchase={focusedPurchase}
               focusedContact={focusedContact}
+              focusedSides={focusedSides}
+              focusedSide={focusedSide}
+              onFocusedSideChange={setFocusedSide}
               onNavigateToContact={handleNavigateToContact}
               onAddPurchaseForAxle={handleAddPurchaseForAxle}
               rulesPending={savedTyresRulesPending}

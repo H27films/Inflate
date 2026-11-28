@@ -69,11 +69,12 @@
         },
         "renewals": {
           "type": "object",
-          "description": "Insurance, Cartax, and (for SLK) Coolant dates (YYYY-MM-DD).",
+          "description": "Insurance, Cartax, Coolant (SLK), and Car Wash dates (YYYY-MM-DD).",
           "properties": {
             "insurance": { "type": "string", "format": "date" },
             "cartax": { "type": "string", "format": "date" },
-            "coolant": { "type": "string", "format": "date" }
+            "coolant": { "type": "string", "format": "date" },
+            "carWash": { "type": "string", "format": "date" }
           },
           "required": ["insurance", "cartax"]
         },

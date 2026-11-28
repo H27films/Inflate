@@ -2,7 +2,13 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X } from 'lucide-react';
 import { CarId, CarProfile, CarRenewals, CORNER_LABELS, TyreCorner } from '../types';
-import { formatRenewalDate, getCornerPurchaseInfo, parseLocalDate } from '../data/initialGarage';
+import {
+  formatRenewalDate,
+  getCornerPurchaseInfo,
+  getDaysSince,
+  getTodayIso,
+  parseLocalDate,
+} from '../data/initialGarage';
 
 interface CarBirdsEyeViewProps {
   car: CarProfile;
@@ -396,8 +402,10 @@ export function CarBirdsEyeView({
   const insuranceDate = car.renewals?.insurance ?? '2027-01-10';
   const cartaxDate = car.renewals?.cartax ?? '2027-01-10';
   const coolantDate = car.renewals?.coolant ?? '2026-11-16';
+  const carWashDate = car.renewals?.carWash ?? null;
   const insuranceCountdown = getRenewalCountdown(insuranceDate);
   const cartaxCountdown = getRenewalCountdown(cartaxDate);
+  const isCarWashOverdue = carWashDate ? getDaysSince(carWashDate) > 21 : false;
 
   const openEditRenewal = (field: keyof CarRenewals, currentDate: string) => {
     setEditingField(field);
@@ -517,7 +525,7 @@ export function CarBirdsEyeView({
           <motion.div
             animate={{
               scale: roofSelected && !isZoomed ? 0.76 : 1,
-              y: roofSelected && !isZoomed ? (car.id === 'slk250' ? '-4.5%' : '2%') : '0%',
+              y: roofSelected && !isZoomed ? (car.id === 'slk250' ? '-2%' : '1%') : '0%',
             }}
             transition={{ type: 'spring', stiffness: 280, damping: 28 }}
             className="relative w-full h-full flex items-center justify-center origin-center will-change-transform"
@@ -612,8 +620,8 @@ export function CarBirdsEyeView({
                 }}
                 aria-label={
                   car.id === 'slk250'
-                    ? 'Toggle insurance, car tax, and coolant dates'
-                    : 'Toggle insurance and car tax renewal dates'
+                    ? 'Toggle insurance, car tax, coolant, and car wash dates'
+                    : 'Toggle insurance, car tax, and car wash dates'
                 }
                 aria-pressed={roofSelected}
                 style={{ left: '50%', top: '52%' }}
@@ -630,7 +638,7 @@ export function CarBirdsEyeView({
             )}
           </motion.div>
 
-          {/* Front Plate, Left Insurance, Right Car Tax & SLK Rear Coolant Pop-Ups */}
+          {/* Front Plate, Insurance, Car Tax, Coolant (left) & Car Wash (right) Pop-Ups */}
           <AnimatePresence>
             {roofSelected && !isZoomed && (
               <>
@@ -641,7 +649,7 @@ export function CarBirdsEyeView({
                   exit={{ opacity: 0, y: 2 }}
                   transition={{ duration: 0.18 }}
                   style={{
-                    top: car.id === 'slk250' ? '5.5%' : '7.5%',
+                    top: car.id === 'slk250' ? '6%' : '7.5%',
                     left: '50%',
                   }}
                   className="absolute -translate-x-1/2 -translate-y-1/2 z-10 text-center w-max pointer-events-none"
@@ -658,7 +666,7 @@ export function CarBirdsEyeView({
                   exit={{ opacity: 0, x: 4 }}
                   transition={{ duration: 0.18 }}
                   style={{
-                    top: car.id === 'slk250' ? '45.5%' : '52%',
+                    top: '36%',
                     right: 'calc(82% + 14px)',
                   }}
                   className="absolute -translate-y-1/2 text-right w-max max-w-[125px] sm:max-w-[175px]"
@@ -694,7 +702,7 @@ export function CarBirdsEyeView({
                   exit={{ opacity: 0, x: -4 }}
                   transition={{ duration: 0.18 }}
                   style={{
-                    top: car.id === 'slk250' ? '45.5%' : '52%',
+                    top: '36%',
                     left: 'calc(82% + 14px)',
                   }}
                   className="absolute -translate-y-1/2 text-left w-max max-w-[125px] sm:max-w-[175px]"
@@ -726,21 +734,21 @@ export function CarBirdsEyeView({
                 {car.id === 'slk250' && (
                   <motion.div
                     key={`${car.id}-coolant`}
-                    initial={{ opacity: 0, y: -4 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -2 }}
+                    initial={{ opacity: 0, x: 6 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 4 }}
                     transition={{ duration: 0.18 }}
                     style={{
-                      top: '92.5%',
-                      left: '50%',
+                      top: '74%',
+                      right: 'calc(82% + 14px)',
                     }}
-                    className="absolute -translate-x-1/2 -translate-y-1/2 z-10 text-center w-max max-w-[160px]"
+                    className="absolute -translate-y-1/2 z-10 text-right w-max max-w-[125px] sm:max-w-[175px]"
                   >
                     <button
                       type="button"
                       onClick={() => openEditRenewal('coolant', coolantDate)}
                       aria-label={`Edit coolant last entry date (${formatRenewalDate(coolantDate)})`}
-                      className="group text-center space-y-0.5 cursor-pointer focus:outline-none"
+                      className="group text-right space-y-0.5 cursor-pointer focus:outline-none"
                     >
                       <p className="font-display text-[13px] sm:text-sm font-medium text-[#2A2E33] leading-tight">
                         Coolant
@@ -751,6 +759,47 @@ export function CarBirdsEyeView({
                     </button>
                   </motion.div>
                 )}
+
+                <motion.div
+                  key={`${car.id}-carwash`}
+                  initial={{ opacity: 0, x: -6 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -4 }}
+                  transition={{ duration: 0.18 }}
+                  style={{
+                    top: '74%',
+                    left: 'calc(82% + 14px)',
+                  }}
+                  className="absolute -translate-y-1/2 z-10 text-left w-max max-w-[125px] sm:max-w-[175px]"
+                >
+                  <button
+                    type="button"
+                    onClick={() => openEditRenewal('carWash', carWashDate ?? getTodayIso())}
+                    aria-label={
+                      carWashDate
+                        ? `Edit car wash date (${formatRenewalDate(carWashDate)})`
+                        : 'Enter car wash date'
+                    }
+                    className="group text-left space-y-0.5 cursor-pointer focus:outline-none"
+                  >
+                    <p
+                      className={`font-display text-[13px] sm:text-sm font-medium leading-tight ${
+                        isCarWashOverdue ? 'text-[#B91C1C]' : 'text-[#2A2E33]'
+                      }`}
+                    >
+                      Car Wash
+                    </p>
+                    <p
+                      className={`font-sans text-[11px] sm:text-xs group-active:scale-[0.98] transition-colors whitespace-nowrap leading-tight ${
+                        isCarWashOverdue
+                          ? 'font-semibold text-[#B91C1C] group-hover:text-[#991B1B]'
+                          : 'font-normal text-[#5E646A] group-hover:text-[#4E6A94]'
+                      }`}
+                    >
+                      {carWashDate ? formatRenewalDate(carWashDate) : 'Enter date'}
+                    </p>
+                  </button>
+                </motion.div>
               </>
             )}
           </AnimatePresence>
@@ -973,7 +1022,9 @@ export function CarBirdsEyeView({
                       ? 'Insurance Renewal'
                       : editingField === 'cartax'
                         ? 'Car Tax Renewal'
-                        : 'Coolant'}
+                        : editingField === 'carWash'
+                          ? 'Car Wash'
+                          : 'Coolant'}
                   </h3>
                   <p className="text-xs text-[#5E646A] mt-0.5">{car.displayTitle}</p>
                 </div>
@@ -989,7 +1040,11 @@ export function CarBirdsEyeView({
 
               <label className="block">
                 <span className="text-[11px] font-medium text-[#5E646A]">
-                  {editingField === 'coolant' ? 'Last entry date' : 'Renewal date'}
+                  {editingField === 'carWash'
+                    ? 'Last wash date'
+                    : editingField === 'coolant'
+                      ? 'Last entry date'
+                      : 'Renewal date'}
                 </span>
                 <input
                   type="date"

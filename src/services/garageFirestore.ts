@@ -557,6 +557,9 @@ export function subscribeToUserGarage(
             : carKey === 'slk250'
               ? { coolant: fallbackRenewals?.coolant ?? '2026-11-16' }
               : {}),
+          ...(typeof rawRenewals?.carWash === 'string'
+            ? { carWash: rawRenewals.carWash }
+            : {}),
         };
         next[carKey] = {
           id: carKey,
@@ -918,6 +921,7 @@ export async function updateCarRenewalsRecord(
     insurance: renewals.insurance,
     cartax: renewals.cartax,
     ...(carId === 'slk250' && renewals.coolant ? { coolant: renewals.coolant } : {}),
+    ...(renewals.carWash ? { carWash: renewals.carWash } : {}),
   };
   try {
     await updateDoc(doc(db, 'cars', carDocId), {

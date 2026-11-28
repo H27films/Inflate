@@ -248,6 +248,227 @@ function processCarAsset(carId: CarId): Promise<string> {
   });
 }
 
+function createSeededRandom(seed: number): () => number {
+  let s = seed >>> 0;
+  return () => {
+    s = (s + 0x6d2b79f5) | 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function processDirtyCarAsset(carId: CarId, cleanSrc: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const w = img.naturalWidth;
+      const h = img.naturalHeight;
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const dirtCanvas = document.createElement('canvas');
+      const dirtCtx = dirtCanvas.getContext('2d');
+
+      if (!ctx || !dirtCtx) {
+        resolve(cleanSrc);
+        return;
+      }
+
+      canvas.width = w;
+      canvas.height = h;
+      dirtCanvas.width = w;
+      dirtCanvas.height = h;
+
+      ctx.drawImage(img, 0, 0, w, h);
+      const cleanData = ctx.getImageData(0, 0, w, h);
+      const rand = createSeededRandom(carId === 'slk250' ? 4219 : 7391);
+      const isDarkCar = carId === 'slk250';
+
+      // 1. Light overall road-dust film
+      dirtCtx.fillStyle = isDarkCar
+        ? 'rgba(176, 164, 146, 0.045)'
+        : 'rgba(90, 76, 58, 0.035)';
+      dirtCtx.fillRect(0, 0, w, h);
+
+      // 2. Soft organic dust patches across hood, roof, sides, and rear
+      const drawSoftBlotch = (
+        cx: number,
+        cy: number,
+        rx: number,
+        ry: number,
+        angle: number,
+        color: string,
+        peakAlpha: number
+      ) => {
+        dirtCtx.save();
+        dirtCtx.translate(cx, cy);
+        dirtCtx.rotate(angle);
+        dirtCtx.scale(1, ry / Math.max(1, rx));
+        const grad = dirtCtx.createRadialGradient(0, 0, rx * 0.08, 0, 0, rx);
+        grad.addColorStop(0, `rgba(${color}, ${peakAlpha})`);
+        grad.addColorStop(0.55, `rgba(${color}, ${peakAlpha * 0.4})`);
+        grad.addColorStop(1, `rgba(${color}, 0)`);
+        dirtCtx.fillStyle = grad;
+        dirtCtx.beginPath();
+        dirtCtx.arc(0, 0, rx, 0, Math.PI * 2);
+        dirtCtx.fill();
+        dirtCtx.restore();
+      };
+
+      const blotchColors = isDarkCar
+        ? ['196, 184, 166', '162, 150, 132']
+        : ['82, 68, 50', '104, 88, 68'];
+
+      for (let i = 0; i < 12; i++) {
+        const cx = (0.16 + rand() * 0.68) * w;
+        const cy = (0.09 + rand() * 0.82) * h;
+        const rx = (0.08 + rand() * 0.14) * w;
+        const ry = (0.09 + rand() * 0.15) * h;
+        const angle = (rand() - 0.5) * 0.8;
+        const color = blotchColors[i % blotchColors.length];
+        const peakAlpha = isDarkCar ? 0.055 + rand() * 0.045 : 0.05 + rand() * 0.045;
+        drawSoftBlotch(cx, cy, rx, ry, angle, color, peakAlpha);
+      }
+
+      // 3. Subtle wheel-arch road-spray & lower-edge dust
+      const wheelSplashZones =
+        carId === 'slk250'
+          ? [
+              { x: 0.16, y: 0.30 },
+              { x: 0.84, y: 0.30 },
+              { x: 0.16, y: 0.81 },
+              { x: 0.84, y: 0.81 },
+            ]
+          : [
+              { x: 0.15, y: 0.27 },
+              { x: 0.85, y: 0.27 },
+              { x: 0.15, y: 0.83 },
+              { x: 0.85, y: 0.83 },
+            ];
+
+      for (const zone of wheelSplashZones) {
+        const splashColor = isDarkCar ? '186, 172, 150' : '74, 60, 44';
+        drawSoftBlotch(
+          zone.x * w,
+          zone.y * h,
+          0.13 * w,
+          0.10 * h,
+          (rand() - 0.5) * 0.4,
+          splashColor,
+          isDarkCar ? 0.10 : 0.11
+        );
+      }
+
+      // Light rear bumper dust accumulation
+      drawSoftBlotch(
+        0.5 * w,
+        0.92 * h,
+        0.32 * w,
+        0.08 * h,
+        0,
+        isDarkCar ? '186, 174, 154' : '76, 62, 46',
+        0.09
+      );
+
+      // 4. Very faint front-to-back airflow dust streaks
+      for (let i = 0; i < 8; i++) {
+        const sx = (0.20 + rand() * 0.60) * w;
+        const sy = (0.10 + rand() * 0.70) * h;
+        const len = (0.06 + rand() * 0.12) * h;
+        const sw = 1.2 + rand() * 2.2;
+        const grad = dirtCtx.createLinearGradient(sx, sy, sx, sy + len);
+        const c = isDarkCar ? '205, 192, 174' : '76, 62, 46';
+        const alpha = 0.03 + rand() * 0.035;
+        grad.addColorStop(0, `rgba(${c}, 0)`);
+        grad.addColorStop(0.35, `rgba(${c}, ${alpha})`);
+        grad.addColorStop(1, `rgba(${c}, 0)`);
+        dirtCtx.strokeStyle = grad;
+        dirtCtx.lineWidth = sw;
+        dirtCtx.lineCap = 'round';
+        dirtCtx.beginPath();
+        dirtCtx.moveTo(sx, sy);
+        dirtCtx.lineTo(sx + (rand() - 0.5) * 4, sy + len);
+        dirtCtx.stroke();
+      }
+
+      // 5. Scattered little dust & grime speck marks (slightly denser near wheel arches & edges)
+      for (let i = 0; i < 340; i++) {
+        const edgeBiasedX =
+          rand() < 0.42
+            ? rand() < 0.5
+              ? 0.09 + rand() * 0.22
+              : 0.69 + rand() * 0.22
+            : 0.14 + rand() * 0.72;
+        const cx = edgeBiasedX * w;
+        const cy = (0.06 + rand() * 0.88) * h;
+        const r = 0.9 + rand() * 1.5;
+        const alpha = 0.16 + rand() * 0.22;
+        dirtCtx.fillStyle = isDarkCar
+          ? rand() > 0.35
+            ? `rgba(212, 200, 182, ${alpha})`
+            : `rgba(168, 154, 134, ${alpha})`
+          : rand() > 0.35
+            ? `rgba(68, 54, 39, ${alpha})`
+            : `rgba(102, 86, 66, ${alpha})`;
+        dirtCtx.beginPath();
+        dirtCtx.arc(cx, cy, r, 0, Math.PI * 2);
+        dirtCtx.fill();
+      }
+
+      // 6. Subtle dried raindrop & spot marks on hood, roof, and rear
+      for (let i = 0; i < 18; i++) {
+        const rx = (0.20 + rand() * 0.60) * w;
+        const ry = (0.12 + rand() * 0.72) * h;
+        const rad = 2.0 + rand() * 3.4;
+        dirtCtx.strokeStyle = isDarkCar
+          ? `rgba(206, 194, 176, ${0.11 + rand() * 0.08})`
+          : `rgba(74, 60, 44, ${0.11 + rand() * 0.08})`;
+        dirtCtx.lineWidth = 0.95;
+        dirtCtx.beginPath();
+        dirtCtx.arc(rx, ry, rad, 0, Math.PI * 2);
+        dirtCtx.stroke();
+      }
+
+      // 7. Pixel-composite dirt strictly inside opaque car bodywork (avoiding drop shadows)
+      const dirtData = dirtCtx.getImageData(0, 0, w, h).data;
+      const px = cleanData.data;
+      const total = px.length;
+      const muteR = isDarkCar ? 132 : 108;
+      const muteG = isDarkCar ? 122 : 95;
+      const muteB = isDarkCar ? 108 : 78;
+
+      for (let i = 0; i < total; i += 4) {
+        const baseA = px[i + 3];
+        if (baseA < 200) continue;
+
+        const edgeMask = baseA >= 245 ? 1 : (baseA - 200) / 45;
+        // Very lightly dull fresh-wax sheen across bodywork
+        const dullFactor = 0.03 * edgeMask;
+        let r = px[i] * (1 - dullFactor) + muteR * dullFactor;
+        let g = px[i + 1] * (1 - dullFactor) + muteG * dullFactor;
+        let b = px[i + 2] * (1 - dullFactor) + muteB * dullFactor;
+
+        const dirtAlpha = (dirtData[i + 3] / 255) * edgeMask;
+        if (dirtAlpha > 0) {
+          r = r * (1 - dirtAlpha) + dirtData[i] * dirtAlpha;
+          g = g * (1 - dirtAlpha) + dirtData[i + 1] * dirtAlpha;
+          b = b * (1 - dirtAlpha) + dirtData[i + 2] * dirtAlpha;
+        }
+
+        px[i] = Math.round(r);
+        px[i + 1] = Math.round(g);
+        px[i + 2] = Math.round(b);
+      }
+
+      ctx.putImageData(cleanData, 0, 0);
+      resolve(canvas.toDataURL('image/png'));
+    };
+    img.onerror = () => reject(new Error('Failed to load car image'));
+    img.src = cleanSrc;
+  });
+}
+
 function WaveEnlargeText({
   text,
   className = '',
@@ -354,6 +575,7 @@ export function CarBirdsEyeView({
   onUpdateRenewal,
 }: CarBirdsEyeViewProps) {
   const [cutoutUrls, setCutoutUrls] = useState<Partial<Record<CarId, string>>>({});
+  const [dirtyCutoutUrls, setDirtyCutoutUrls] = useState<Partial<Record<CarId, string>>>({});
   const [roofSelected, setRoofSelected] = useState(false);
   const [isZoomedIn, setIsZoomedIn] = useState(false);
   const [keepClipped, setKeepClipped] = useState(false);
@@ -414,7 +636,29 @@ export function CarBirdsEyeView({
   const carWashDate = car.renewals?.carWash ?? null;
   const insuranceCountdown = getRenewalCountdown(insuranceDate);
   const cartaxCountdown = getRenewalCountdown(cartaxDate);
-  const isCarWashOverdue = carWashDate ? getDaysSince(carWashDate) > 21 : false;
+  const carWashDays = carWashDate ? getDaysSince(carWashDate) : null;
+  const isCarWashOverdue = carWashDays !== null ? carWashDays > 21 : false;
+  const isCarDirty = carWashDays !== null ? carWashDays > 42 : false;
+
+  useEffect(() => {
+    if (!isCarDirty) return;
+    if (dirtyCutoutUrls[car.id]) return;
+    if (car.id === 'slk250' && !cutoutUrls.slk250) return;
+
+    let active = true;
+    const baseSrc = car.id === 'slk250' ? cutoutUrls.slk250! : SOURCE_IMAGES[car.id];
+    processDirtyCarAsset(car.id, baseSrc)
+      .then((dirtyUrl) => {
+        if (active) {
+          setDirtyCutoutUrls((prev) => ({ ...prev, [car.id]: dirtyUrl }));
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      active = false;
+    };
+  }, [car.id, isCarDirty, cutoutUrls.slk250, dirtyCutoutUrls]);
 
   const openEditRenewal = (field: keyof CarRenewals, currentDate: string) => {
     setEditingField(field);
@@ -558,6 +802,16 @@ export function CarBirdsEyeView({
               referrerPolicy="no-referrer"
               className="w-full h-full object-contain pointer-events-none drop-shadow-[0_10px_18px_rgba(17,19,21,0.12)]"
             />
+            {dirtyCutoutUrls[car.id] && (
+              <img
+                src={dirtyCutoutUrls[car.id]}
+                alt=""
+                aria-hidden="true"
+                className={`absolute inset-0 w-full h-full object-contain pointer-events-none transition-opacity duration-300 ${
+                  isCarDirty && !isZoomed ? 'opacity-100' : 'opacity-0'
+                }`}
+              />
+            )}
 
             {/* Interactive Wheel Hotspots */}
             {spots.map((spot) => {

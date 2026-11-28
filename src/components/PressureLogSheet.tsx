@@ -18,6 +18,7 @@ import {
   formatRelativeDays,
   getTodayIso,
 } from '../data/initialGarage';
+import { ArcDatePicker } from './ArcDatePicker';
 
 interface PressureLogSheetProps {
   car: CarProfile;
@@ -322,16 +323,15 @@ export function PressureLogSheet({
                   </div>
 
                   <div className="grid grid-cols-2 gap-2.5">
-                    <label className="block">
+                    <div>
                       <span className="text-[11px] font-medium text-[#5E646A]">Date</span>
-                      <input
-                        type="date"
-                        required
+                      <ArcDatePicker
+                        label="Top-up date"
                         value={date}
-                        onChange={(e) => setDate(e.target.value)}
-                        className="mt-1 w-full h-10 px-2.5 rounded-xl bg-white border border-black/10 text-xs font-mono text-[#111315]"
+                        onChange={setDate}
+                        buttonClassName="mt-1 w-full h-10 px-2.5 rounded-xl bg-white border border-black/10 text-xs font-mono text-[#111315] flex items-center justify-between gap-2 hover:border-black/25 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#111315] transition-colors cursor-pointer"
                       />
-                    </label>
+                    </div>
                     <div>
                       <label htmlFor="sheet-log-location" className="text-[11px] font-medium text-[#5E646A]">
                         Location

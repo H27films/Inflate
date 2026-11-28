@@ -322,6 +322,7 @@ export default function App() {
   const otherCar = garage[otherCarId];
 
   const handleSwapCar = () => {
+    setAddPurchaseOpen(false);
     setActiveCarId(otherCarId);
     setSelectedCorner(null);
   };
@@ -424,13 +425,17 @@ export default function App() {
       >
         <OfflineIndicator />
       {/* Top Bar: Left Add Purchase (on Purchases) or PWA Install (on Home) · Centered INFLATE · Top-Right Switch Cars */}
-      <header className="shrink-0 z-20 bg-[#F3F4F2] border-b border-black/6 pt-[calc(0.75rem+env(safe-area-inset-top))]">
+      <header
+        className={`shrink-0 bg-[#F3F4F2] border-b border-black/6 pt-[calc(0.75rem+env(safe-area-inset-top))] ${
+          addPurchaseOpen ? 'relative z-40' : 'z-20'
+        }`}
+      >
         <div className="max-w-5xl lg:max-w-[540px] mx-auto px-4 h-13 pb-0.5 relative flex items-center justify-center">
 
           {activeTab === 'purchases' ? (
             <button
               type="button"
-              onClick={() => setAddPurchaseOpen(true)}
+              onClick={() => setAddPurchaseOpen((prev) => !prev)}
               aria-label="Add tyre purchase"
               title="Add tyre purchase"
               className="absolute left-3.5 w-8 h-8 rounded-full bg-[#111315] text-white border border-black/8 shadow-[0_2px_8px_rgba(17,19,21,0.04)] hover:bg-black/85 active:scale-[0.96] transition-all flex items-center justify-center cursor-pointer"
@@ -658,10 +663,12 @@ export default function App() {
         onSelectTab={(tab) => {
           setLogExpanded(false);
           setLogModalOpen(false);
+          setAddPurchaseOpen(false);
           setActiveTab(tab);
         }}
         onOpenLog={() => {
           setLogExpanded(false);
+          setAddPurchaseOpen(false);
           setLogModalOpen((prev) => !prev);
         }}
       />

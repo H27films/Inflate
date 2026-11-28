@@ -9,6 +9,7 @@ import {
   getTodayIso,
   parseLocalDate,
 } from '../data/initialGarage';
+import { ArcDatePicker } from './ArcDatePicker';
 
 interface CarBirdsEyeViewProps {
   car: CarProfile;
@@ -1440,7 +1441,7 @@ export function CarBirdsEyeView({
                 </button>
               </div>
 
-              <label className="block">
+              <div>
                 <span className="text-[11px] font-medium text-[#5E646A]">
                   {editingField === 'carWash'
                     ? 'Last wash date'
@@ -1448,14 +1449,19 @@ export function CarBirdsEyeView({
                       ? 'Last entry date'
                       : 'Renewal date'}
                 </span>
-                <input
-                  type="date"
-                  required
+                <ArcDatePicker
+                  label={
+                    editingField === 'carWash'
+                      ? 'Last wash date'
+                      : editingField === 'coolant'
+                        ? 'Last entry date'
+                        : 'Renewal date'
+                  }
                   value={draftDate}
-                  onChange={(e) => setDraftDate(e.target.value)}
-                  className="mt-1.5 w-full h-11 px-3 rounded-xl bg-[#F3F4F2] border border-black/10 text-sm font-mono text-[#111315]"
+                  onChange={setDraftDate}
+                  buttonClassName="mt-1.5 w-full h-11 px-3 rounded-xl bg-[#F3F4F2] border border-black/10 text-sm font-mono text-[#111315] flex items-center justify-between gap-2 hover:border-black/25 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#111315] transition-colors cursor-pointer"
                 />
-              </label>
+              </div>
 
               <div className="flex items-center gap-2 pt-1">
                 <button

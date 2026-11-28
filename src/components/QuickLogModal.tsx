@@ -19,6 +19,7 @@ import {
   TyreCorner,
 } from '../types';
 import { detectCurrentLocationName, getTodayIso } from '../data/initialGarage';
+import { ArcDatePicker } from './ArcDatePicker';
 
 interface QuickLogModalProps {
   open: boolean;
@@ -30,7 +31,7 @@ interface QuickLogModalProps {
 
 type LogModalStep = 'choose' | 'air' | 'wash';
 
-function WheelTyreIcon({ className = 'w-[22px] h-[22px]' }: { className?: string }) {
+export function WheelTyreIcon({ className = 'w-[22px] h-[22px]' }: { className?: string }) {
   return (
     <svg
       viewBox="0 0 24 24"
@@ -344,19 +345,17 @@ export function QuickLogModal({
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <label className="block">
+                  <div>
                     <span className="text-xs font-medium text-[#5E646A] flex items-center gap-1.5">
                       <Calendar className="w-3.5 h-3.5" />
                       Date
                     </span>
-                    <input
-                      type="date"
-                      required
+                    <ArcDatePicker
+                      label="Air top-up date"
                       value={date}
-                      onChange={(e) => setDate(e.target.value)}
-                      className="mt-1 w-full h-11 px-3 rounded-xl bg-[#F3F4F2] border border-black/8 text-xs font-mono text-[#111315]"
+                      onChange={setDate}
                     />
-                  </label>
+                  </div>
 
                   <div>
                     <label
@@ -524,19 +523,17 @@ export function QuickLogModal({
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <label className="block">
+                  <div>
                     <span className="text-xs font-medium text-[#5E646A] flex items-center gap-1.5">
                       <Calendar className="w-3.5 h-3.5" />
                       Date
                     </span>
-                    <input
-                      type="date"
-                      required
+                    <ArcDatePicker
+                      label="Car wash date"
                       value={washDate}
-                      onChange={(e) => setWashDate(e.target.value)}
-                      className="mt-1 w-full h-11 px-3 rounded-xl bg-[#F3F4F2] border border-black/8 text-xs font-mono text-[#111315]"
+                      onChange={setWashDate}
                     />
-                  </label>
+                  </div>
 
                   <label className="block">
                     <span className="text-xs font-medium text-[#5E646A] flex items-center gap-1.5">

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type ChangeEvent, type ClipboardEvent, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
-import { ArrowLeft, Plus, Trash2, X, Store, Ruler, Globe, Phone, ClipboardPaste, Check, ChevronDown, Disc, Upload } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, X, Store, Ruler, Globe, Phone, ClipboardPaste, Check, ChevronDown, Upload, CircleDollarSign } from 'lucide-react';
+import { WheelTyreIcon } from './QuickLogModal';
 import {
   CarProfile,
   CORNER_LABELS,
@@ -34,6 +35,7 @@ import {
   TyreSide,
   WHEEL_STYLE_OPTIONS,
 } from './SavedTyresCarousel';
+import { ArcDatePicker } from './ArcDatePicker';
 
 interface PurchasesViewProps {
   car: CarProfile;
@@ -1692,88 +1694,86 @@ export function PurchasesView({
         </motion.div>
       </motion.div>
 
-      {/* Add Modal: Drops down from top below header, portaled above BottomNav */}
+      {/* Add Modal: Floating frosted capsule on 'choose', drops down from top for forms */}
       {typeof document !== 'undefined' &&
         createPortal(
           <AnimatePresence>
-            {addModalOpen && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="fixed inset-0 z-50 bg-black/40 flex items-start justify-center pt-[calc(4.15rem+env(safe-area-inset-top))] px-0 sm:px-4"
-                onClick={onCloseAddModal}
-              >
-                {addMode === 'choose' ? (
-                  <motion.div
+            {addModalOpen && addMode === 'choose' && (
+              <>
+                <motion.div
+                  key="add-choose-backdrop"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.18 }}
+                  onClick={onCloseAddModal}
+                  className="fixed inset-0 z-35 bg-[#E9EBE7]/45 backdrop-blur-md"
+                />
+
+                <motion.div
+                  key="add-choose-pill"
+                  initial={{ opacity: 0, y: -14, scale: 0.94 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                  transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                  className="fixed inset-x-0 top-[calc(4.35rem+env(safe-area-inset-top))] z-50 flex justify-center px-4 pointer-events-none"
+                >
+                  <div
                     role="dialog"
                     aria-modal="true"
                     aria-label="Add tyre or purchase"
-                    initial={{ y: -24, opacity: 0, scale: 0.98 }}
-                    animate={{ y: 0, opacity: 1, scale: 1 }}
-                    exit={{ y: -20, opacity: 0, scale: 0.98 }}
-                    transition={{ type: 'spring', stiffness: 380, damping: 32 }}
-                    onClick={(e) => e.stopPropagation()}
-                    className="mx-3.5 sm:mx-0 w-full max-w-md bg-white rounded-3xl p-5 space-y-4 shadow-2xl"
+                    className="pointer-events-auto inline-flex items-center p-1.5 rounded-full bg-white/62 backdrop-blur-2xl border border-white/90 ring-1 ring-black/[0.08] shadow-[0_14px_38px_rgba(17,19,21,0.16),inset_0_1.5px_1px_rgba(255,255,255,0.95),inset_0_-1px_2px_rgba(17,19,21,0.06)]"
                   >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="font-display text-lg font-semibold text-[#111315]">
-                      Add to garage
-                    </h3>
-                    <p className="text-xs text-[#5E646A]">
-                      {car.displayTitle} ({car.trim})
-                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setAddMode('purchase')}
+                      className="h-11 px-4 sm:px-5 rounded-full inline-flex items-center justify-center gap-2 text-[#111315] hover:bg-white/75 active:scale-[0.97] hover:shadow-[inset_0_1px_1px_rgba(255,255,255,0.95),0_2px_8px_rgba(17,19,21,0.08)] transition-all cursor-pointer"
+                    >
+                      <CircleDollarSign
+                        className="w-[20px] h-[20px] text-[#111315] shrink-0"
+                        strokeWidth={1.65}
+                      />
+                      <span className="font-display text-[14px] font-medium tracking-tight text-[#111315] whitespace-nowrap">
+                        Purchase
+                      </span>
+                    </button>
+
+                    <span
+                      aria-hidden="true"
+                      className="w-px h-5 bg-black/10 mx-0.5 shrink-0"
+                    />
+
+                    <button
+                      type="button"
+                      onClick={() => setAddMode('tyre')}
+                      className="h-11 px-4 sm:px-5 rounded-full inline-flex items-center justify-center gap-2 text-[#111315] hover:bg-white/75 active:scale-[0.97] hover:shadow-[inset_0_1px_1px_rgba(255,255,255,0.95),0_2px_8px_rgba(17,19,21,0.08)] transition-all cursor-pointer"
+                    >
+                      <span className="relative inline-flex items-center justify-center shrink-0">
+                        <WheelTyreIcon className="w-[21px] h-[21px] text-[#111315]" />
+                        <Plus
+                          className="w-2.5 h-2.5 text-[#111315] bg-white/90 rounded-full -ml-1.5 -mt-0.5 self-start shadow-[0_0_0_1px_rgba(255,255,255,0.95)]"
+                          strokeWidth={2.75}
+                        />
+                      </span>
+                      <span className="font-display text-[14px] font-medium tracking-tight text-[#111315] whitespace-nowrap">
+                        Add Tyres
+                      </span>
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={onCloseAddModal}
-                    aria-label="Close modal"
-                    className="w-10 h-10 rounded-full bg-[#F3F4F2] flex items-center justify-center text-[#111315] cursor-pointer"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
+                </motion.div>
+              </>
+            )}
 
-                <div className="grid grid-cols-1 gap-2.5">
-                  <button
-                    type="button"
-                    onClick={() => setAddMode('purchase')}
-                    className="w-full p-4 rounded-2xl bg-[#16191D] text-white hover:bg-[#1E2228] active:scale-[0.99] transition-all flex items-center gap-3.5 text-left cursor-pointer"
-                  >
-                    <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center shrink-0">
-                      <Store className="w-4.5 h-4.5 text-white" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="font-display text-sm font-semibold text-white">
-                        Log tyre purchase
-                      </p>
-                      <p className="mt-0.5 text-xs text-white/65">
-                        Record fitted tyres, workshop, date &amp; cost
-                      </p>
-                    </div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setAddMode('tyre')}
-                    className="w-full p-4 rounded-2xl bg-[#F3F4F2] text-[#111315] border border-black/8 hover:bg-[#EAECE8] active:scale-[0.99] transition-all flex items-center gap-3.5 text-left cursor-pointer"
-                  >
-                    <div className="w-10 h-10 rounded-xl bg-white border border-black/8 flex items-center justify-center shrink-0">
-                      <Disc className="w-4.5 h-4.5 text-[#111315]" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="font-display text-sm font-semibold text-[#111315]">
-                        Add tyres
-                      </p>
-                      <p className="mt-0.5 text-xs text-[#5E646A]">
-                        Save a tyre option &amp; price to the carousel
-                      </p>
-                    </div>
-                  </button>
-                </div>
-              </motion.div>
-            ) : addMode === 'tyre' ? (
+            {addModalOpen && addMode !== 'choose' && (
+              <motion.div
+                key="add-form-modal"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-50 bg-black/40 backdrop-blur-[2px] flex items-start justify-center pt-[calc(4.15rem+env(safe-area-inset-top))] px-0 sm:px-4"
+                onClick={onCloseAddModal}
+              >
+                {addMode === 'tyre' ? (
               <motion.form
                 role="dialog"
                 aria-modal="true"
@@ -2117,16 +2117,14 @@ export function PurchasesView({
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">
-                      <label className="block">
+                      <div>
                         <span className="text-xs font-medium text-[#5E646A]">Purchase date</span>
-                        <input
-                          type="date"
-                          required
+                        <ArcDatePicker
+                          label="Purchase date"
                           value={date}
-                          onChange={(e) => setDate(e.target.value)}
-                          className="mt-1 w-full h-11 px-3 rounded-xl bg-[#F3F4F2] border border-black/8 text-xs font-mono text-[#111315]"
+                          onChange={setDate}
                         />
-                      </label>
+                      </div>
                       <label className="block">
                         <span className="text-xs font-medium text-[#5E646A]">Total cost (RM)</span>
                         <input

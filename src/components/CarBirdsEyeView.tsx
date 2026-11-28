@@ -355,14 +355,17 @@ export function CarBirdsEyeView({
 }: CarBirdsEyeViewProps) {
   const [cutoutUrls, setCutoutUrls] = useState<Partial<Record<CarId, string>>>({});
   const [roofSelected, setRoofSelected] = useState(false);
-  const [zoomedCorner, setZoomedCorner] = useState<TyreCorner | null>(null);
+  const [isZoomedIn, setIsZoomedIn] = useState(false);
   const [keepClipped, setKeepClipped] = useState(false);
   const [editingField, setEditingField] = useState<keyof CarRenewals | null>(null);
   const [draftDate, setDraftDate] = useState('2027-01-10');
 
+  const zoomedCorner: TyreCorner | null =
+    isZoomedIn && selectedCorner ? selectedCorner : null;
+
   useEffect(() => {
     setRoofSelected(false);
-    setZoomedCorner(null);
+    setIsZoomedIn(false);
     setKeepClipped(false);
     setEditingField(null);
   }, [car.id]);
@@ -374,10 +377,10 @@ export function CarBirdsEyeView({
   }, [zoomedCorner]);
 
   useEffect(() => {
-    if (!selectedCorner || selectedCorner !== zoomedCorner) {
-      setZoomedCorner(null);
+    if (!selectedCorner) {
+      setIsZoomedIn(false);
     }
-  }, [selectedCorner, zoomedCorner]);
+  }, [selectedCorner]);
 
   useEffect(() => {
     if (selectedCorner) {
@@ -442,8 +445,7 @@ export function CarBirdsEyeView({
     ? formatTyreAgeMonthsUpper(selectedInfo.date)
     : null;
   const latestLog = car.pressureLogs[0] ?? null;
-  // TEMP PREVIEW: revert after confirmation
-  const isPressureLogOverdue = true || (latestLog ? getDaysSince(latestLog.date) >= 13 : true);
+  const isPressureLogOverdue = latestLog ? getDaysSince(latestLog.date) >= 13 : true;
 
   const isEntryCornerRed = (
     entry: CarProfile['pressureLogs'][number],
@@ -519,7 +521,7 @@ export function CarBirdsEyeView({
       {isZoomed && (
         <button
           type="button"
-          onClick={() => setZoomedCorner(null)}
+          onClick={() => setIsZoomedIn(false)}
           aria-label="Zoom out to full car"
           className="absolute inset-0 z-0 cursor-pointer focus:outline-none"
         />
@@ -631,7 +633,7 @@ export function CarBirdsEyeView({
                   type="button"
                   onClick={() => {
                     if (isZoomed) {
-                      setZoomedCorner(null);
+                      setIsZoomedIn(false);
                       return;
                     }
                     setRoofSelected(false);
@@ -950,13 +952,13 @@ export function CarBirdsEyeView({
                 tabIndex={0}
                 onClick={() => {
                   setRoofSelected(false);
-                  setZoomedCorner(activeSpot.corner);
+                  setIsZoomedIn(true);
                 }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault();
                     setRoofSelected(false);
-                    setZoomedCorner(activeSpot.corner);
+                    setIsZoomedIn(true);
                   }
                 }}
                 aria-label={`Zoom in to ${CORNER_LABELS[activeSpot.corner]} wheel and recent readings`}
@@ -1018,7 +1020,7 @@ export function CarBirdsEyeView({
       </AnimatePresence>
 
       {/* Zoomed Wheel Detail & Last 3 Readings Overlay */}
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
         {zoomedSpot && (
           <motion.div
             key={`zoom-detail-${car.id}-${zoomedSpot.corner}`}
@@ -1032,6 +1034,7 @@ export function CarBirdsEyeView({
               opacity: 0,
               x: isZoomedLeftWheel ? -12 : 12,
               scale: 0.94,
+              transition: { duration: 0.14, ease: 'easeOut' },
             }}
             transition={{ type: 'spring', stiffness: 320, damping: 28 }}
             className={`absolute top-1/2 -translate-y-1/2 z-20 w-[56%] max-w-[235px] space-y-2 pointer-events-auto ${
@@ -1056,7 +1059,7 @@ export function CarBirdsEyeView({
 
                 <button
                   type="button"
-                  onClick={() => setZoomedCorner(null)}
+                  onClick={() => setIsZoomedIn(false)}
                   aria-label="Zoom out"
                   className="w-7 h-7 rounded-full bg-white/90 border border-black/10 shadow-sm flex items-center justify-center text-[#5E646A] hover:text-[#111315] shrink-0 cursor-pointer"
                 >

@@ -6,6 +6,7 @@ import {
   CarId,
   CarProfile,
   CarRenewals,
+  CarWashLogEntry,
   CORNER_LABELS,
   PressureLogEntry,
   PurchaseLogEntry,
@@ -23,10 +24,12 @@ import {
 } from './data/initialGarage';
 import { auth, googleProvider } from './firebase';
 import {
+  addCarWashLogRecord,
   addContactRecord,
   addPressureLogRecord,
   addPurchaseLogRecord,
   addSavedTyreRecord,
+  deleteCarWashLogRecord,
   deleteContactRecord,
   deletePressureLogRecord,
   deletePurchaseLogRecord,
@@ -64,6 +67,10 @@ export default function App() {
     fortuner: [],
   });
   const [purchaseLogsByCar, setPurchaseLogsByCar] = useState<Record<CarId, PurchaseLogEntry[]>>({
+    slk250: [],
+    fortuner: [],
+  });
+  const [carWashLogsByCar, setCarWashLogsByCar] = useState<Record<CarId, CarWashLogEntry[]>>({
     slk250: [],
     fortuner: [],
   });
@@ -125,6 +132,7 @@ export default function App() {
       setCarsMeta({});
       setPressureLogsByCar({ slk250: [], fortuner: [] });
       setPurchaseLogsByCar({ slk250: [], fortuner: [] });
+      setCarWashLogsByCar({ slk250: [], fortuner: [] });
       setSavedTyresByCar({ slk250: [], fortuner: [] });
       setSavedTyresSynced(false);
       setSavedTyresRulesPending(false);
@@ -179,6 +187,9 @@ export default function App() {
         setPurchaseLogsByCar(grouped);
         purchasesLoaded = true;
         markLoaded();
+      },
+      onCarWashLogs: (grouped) => {
+        setCarWashLogsByCar(grouped);
       },
       onContacts: (list) => {
         setContacts(list);
@@ -236,6 +247,7 @@ export default function App() {
         }),
         pressureLogs: pressureLogsByCar[carId],
         purchaseLogs: purchaseLogsByCar[carId],
+        carWashLogs: carWashLogsByCar[carId],
         savedTyres: savedTyresSynced
           ? savedTyresByCar[carId]
           : savedTyresRulesPending
@@ -248,7 +260,7 @@ export default function App() {
       slk250: buildCar('slk250'),
       fortuner: buildCar('fortuner'),
     };
-  }, [carsMeta, pressureLogsByCar, purchaseLogsByCar, savedTyresByCar, savedTyresSynced, savedTyresRulesPending]);
+  }, [carsMeta, pressureLogsByCar, purchaseLogsByCar, carWashLogsByCar, savedTyresByCar, savedTyresSynced, savedTyresRulesPending]);
 
   const handleGoogleSignIn = async () => {
     if (signingIn) return;
@@ -390,6 +402,18 @@ export default function App() {
     runFirestoreAction(updateCarRenewalsRecord(user.uid, activeCarId, nextRenewals));
   };
 
+  const handleAddCarWashLog = (entry: Omit<CarWashLogEntry, 'id'>) => {
+    runFirestoreAction(addCarWashLogRecord(user.uid, activeCarId, entry));
+    const currentWashDate = activeCar.renewals?.carWash;
+    if (!currentWashDate || entry.date >= currentWashDate) {
+      handleUpdateRenewal('carWash', entry.date);
+    }
+  };
+
+  const handleDeleteCarWashLog = (id: string) => {
+    runFirestoreAction(deleteCarWashLogRecord(id));
+  };
+
   return (
       <div
         className={
@@ -523,6 +547,7 @@ export default function App() {
                 selectedCorner={selectedCorner}
                 onSelectCorner={setSelectedCorner}
                 onUpdateRenewal={handleUpdateRenewal}
+                onDeleteCarWashLog={handleDeleteCarWashLog}
               />
             </div>
 
@@ -632,20 +657,22 @@ export default function App() {
         showBackdrop={activeTab === 'purchases' ? purchasesExpanded : logExpanded}
         onSelectTab={(tab) => {
           setLogExpanded(false);
+          setLogModalOpen(false);
           setActiveTab(tab);
         }}
         onOpenLog={() => {
           setLogExpanded(false);
-          setLogModalOpen(true);
+          setLogModalOpen((prev) => !prev);
         }}
       />
 
-      {/* Quick Log Modal (Date + Location) */}
+      {/* Quick Log Modal (Air Top-Up or Car Wash) */}
       <QuickLogModal
         open={logModalOpen}
         car={carWithSortedLogs}
         onClose={() => setLogModalOpen(false)}
         onLogCreated={handleAddPressureLog}
+        onWashLogCreated={handleAddCarWashLog}
       />
     </div>
     );

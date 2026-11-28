@@ -379,6 +379,57 @@
         "createdAt",
         "updatedAt"
       ]
+    },
+    "CarWashLog": {
+      "title": "CarWashLog",
+      "description": "A car wash log entry for a vehicle recording date, RM price, and location.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the wash log owner."
+        },
+        "carId": {
+          "type": "string",
+          "enum": ["slk250", "fortuner"]
+        },
+        "carDocId": {
+          "type": "string",
+          "description": "Document ID of the parent car document in /cars."
+        },
+        "date": {
+          "type": "string",
+          "format": "date",
+          "description": "Car wash date in YYYY-MM-DD format."
+        },
+        "price": {
+          "type": "number",
+          "description": "Car wash cost in RM."
+        },
+        "location": {
+          "type": "string",
+          "maxLength": 160,
+          "description": "Car wash center or location name."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "ownerId",
+        "carId",
+        "carDocId",
+        "date",
+        "price",
+        "location",
+        "createdAt",
+        "updatedAt"
+      ]
     }
   },
   "firestore": {
@@ -401,6 +452,10 @@
     "/savedTyres/{tyreId}": {
       "schema": { "$ref": "#/entities/SavedTyre" },
       "description": "Saved tyre options and price quotes owned by the authenticated user."
+    },
+    "/carWashLogs/{washId}": {
+      "schema": { "$ref": "#/entities/CarWashLog" },
+      "description": "Car wash log entries (date, RM price, location) owned by the authenticated user."
     }
   }
 }

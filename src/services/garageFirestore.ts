@@ -20,6 +20,7 @@ import {
   CarId,
   CarProfile,
   CarRenewals,
+  CarWashLogEntry,
   CornerPressures,
   PressureLogEntry,
   PurchaseLogEntry,
@@ -523,6 +524,7 @@ export interface GarageSubscriptionsCallbacks {
   onCars: (cars: Partial<Record<CarId, Omit<CarProfile, 'pressureLogs' | 'purchaseLogs'>>>) => void;
   onPressureLogs: (logsByCar: Record<CarId, PressureLogEntry[]>) => void;
   onPurchaseLogs: (purchasesByCar: Record<CarId, PurchaseLogEntry[]>) => void;
+  onCarWashLogs?: (washesByCar: Record<CarId, CarWashLogEntry[]>) => void;
   onContacts: (contacts: TyreContact[]) => void;
   onSavedTyres?: (tyresByCar: Record<CarId, SavedTyreOption[]>, syncedFromDb: boolean) => void;
   onSavedTyresRulesPending?: (pending: boolean) => void;
@@ -730,12 +732,51 @@ export function subscribeToUserGarage(
     }
   );
 
+  const unsubCarWashLogs = onSnapshot(
+    query(collection(db, 'carWashLogs'), where('ownerId', '==', uid)),
+    (snap) => {
+      const grouped: Record<CarId, CarWashLogEntry[]> = { slk250: [], fortuner: [] };
+      const sortMeta = new Map<string, number>();
+      snap.forEach((docSnap) => {
+        const d = docSnap.data();
+        const carId = d.carId as CarId;
+        if (carId !== 'slk250' && carId !== 'fortuner') return;
+        const createdMillis =
+          typeof d.createdAt?.toMillis === 'function' ? d.createdAt.toMillis() : 0;
+        sortMeta.set(docSnap.id, createdMillis);
+        grouped[carId].push({
+          id: docSnap.id,
+          date: String(d.date),
+          price: Number(d.price ?? 0),
+          location: String(d.location ?? 'Car Wash'),
+        });
+      });
+      const sortWashes = (list: CarWashLogEntry[]) =>
+        list.sort(
+          (a, b) =>
+            b.date.localeCompare(a.date) ||
+            (sortMeta.get(b.id) ?? 0) - (sortMeta.get(a.id) ?? 0)
+        );
+      sortWashes(grouped.slk250);
+      sortWashes(grouped.fortuner);
+      callbacks.onCarWashLogs?.(grouped);
+    },
+    (error) => {
+      try {
+        handleFirestoreError(error, OperationType.LIST, 'carWashLogs');
+      } catch (wrapped) {
+        callbacks.onError(wrapped as Error);
+      }
+    }
+  );
+
   return () => {
     unsubCars();
     unsubPressure();
     unsubPurchases();
     unsubContacts();
     unsubSavedTyres();
+    unsubCarWashLogs();
   };
 }
 
@@ -845,6 +886,46 @@ export async function deletePurchaseLogRecord(id: string): Promise<void> {
   const path = `purchaseLogs/${id}`;
   try {
     await deleteDoc(doc(db, 'purchaseLogs', id));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+  }
+}
+
+export async function addCarWashLogRecord(
+  uid: string,
+  carId: CarId,
+  entry: Omit<CarWashLogEntry, 'id'>
+): Promise<void> {
+  const id = makeDocId(uid, `wash-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`);
+  const path = `carWashLogs/${id}`;
+  const cleanDate = /^\d{4}-\d{2}-\d{2}$/.test(entry.date)
+    ? entry.date
+    : new Date().toISOString().slice(0, 10);
+  const cleanLocation = (entry.location.trim() || 'Car Wash').slice(0, 160);
+  const cleanPrice = Math.round(Math.max(0, Math.min(100000, Number(entry.price) || 0)) * 100) / 100;
+
+  const payload: Record<string, unknown> = {
+    ownerId: uid,
+    carId,
+    carDocId: makeDocId(uid, carId),
+    date: cleanDate,
+    price: cleanPrice,
+    location: cleanLocation,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+
+  try {
+    await setDoc(doc(db, 'carWashLogs', id), payload);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, path);
+  }
+}
+
+export async function deleteCarWashLogRecord(id: string): Promise<void> {
+  const path = `carWashLogs/${id}`;
+  try {
+    await deleteDoc(doc(db, 'carWashLogs', id));
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, path);
   }

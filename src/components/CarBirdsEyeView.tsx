@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X } from 'lucide-react';
+import { Trash2, X } from 'lucide-react';
 import { CarId, CarProfile, CarRenewals, CORNER_LABELS, TyreCorner } from '../types';
 import {
   formatRenewalDate,
@@ -15,6 +15,7 @@ interface CarBirdsEyeViewProps {
   selectedCorner: TyreCorner | null;
   onSelectCorner: (corner: TyreCorner | null) => void;
   onUpdateRenewal: (field: keyof CarRenewals, date: string) => void;
+  onDeleteCarWashLog?: (id: string) => void;
 }
 
 interface WheelSpot {
@@ -573,6 +574,7 @@ export function CarBirdsEyeView({
   selectedCorner,
   onSelectCorner,
   onUpdateRenewal,
+  onDeleteCarWashLog,
 }: CarBirdsEyeViewProps) {
   const [cutoutUrls, setCutoutUrls] = useState<Partial<Record<CarId, string>>>({});
   const [dirtyCutoutUrls, setDirtyCutoutUrls] = useState<Partial<Record<CarId, string>>>({});
@@ -633,7 +635,13 @@ export function CarBirdsEyeView({
   const insuranceDate = car.renewals?.insurance ?? '2027-01-10';
   const cartaxDate = car.renewals?.cartax ?? '2027-01-10';
   const coolantDate = car.renewals?.coolant ?? '2026-11-16';
-  const carWashDate = car.renewals?.carWash ?? null;
+  const latestLoggedWashDate = car.carWashLogs?.[0]?.date ?? null;
+  const carWashDate =
+    car.renewals?.carWash && latestLoggedWashDate
+      ? car.renewals.carWash >= latestLoggedWashDate
+        ? car.renewals.carWash
+        : latestLoggedWashDate
+      : car.renewals?.carWash ?? latestLoggedWashDate;
   const insuranceCountdown = getRenewalCountdown(insuranceDate);
   const cartaxCountdown = getRenewalCountdown(cartaxDate);
   const carWashDays = carWashDate ? getDaysSince(carWashDate) : null;
@@ -1464,6 +1472,41 @@ export function CarBirdsEyeView({
                   Save
                 </button>
               </div>
+
+              {editingField === 'carWash' && (car.carWashLogs?.length ?? 0) > 0 && (
+                <div className="pt-3 border-t border-black/8 space-y-2">
+                  <p className="text-[11px] font-medium text-[#5E646A]">
+                    Recent washes
+                  </p>
+                  <div className="max-h-36 overflow-y-auto space-y-1.5 pr-0.5">
+                    {car.carWashLogs!.slice(0, 6).map((wash) => (
+                      <div
+                        key={wash.id}
+                        className="flex items-center justify-between gap-2 px-2.5 py-2 rounded-xl bg-[#F3F4F2] text-xs"
+                      >
+                        <div className="min-w-0">
+                          <p className="font-medium text-[#111315] truncate">
+                            {wash.location}
+                          </p>
+                          <p className="text-[11px] font-mono text-[#5E646A] tabular-nums">
+                            {formatRenewalDate(wash.date)} · {formatPrice(wash.price)}
+                          </p>
+                        </div>
+                        {onDeleteCarWashLog && (
+                          <button
+                            type="button"
+                            onClick={() => onDeleteCarWashLog(wash.id)}
+                            aria-label={`Delete car wash on ${wash.date}`}
+                            className="w-7 h-7 rounded-full flex items-center justify-center text-[#9AA0A6] hover:text-red-600 hover:bg-red-50 transition-colors shrink-0 cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </motion.form>
           </motion.div>
         )}

@@ -234,6 +234,23 @@ service cloud.firestore {
         && data.updatedAt is timestamp;
     }
 
+    function isValidCarWashLogDoc(data) {
+      return data.keys().hasAll([
+          'ownerId', 'carId', 'carDocId', 'date', 'price', 'location', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'carId', 'carDocId', 'date', 'price', 'location', 'createdAt', 'updatedAt'
+        ])
+        && data.ownerId == request.auth.uid
+        && isValidCarKey(data.carId)
+        && isValidId(data.carDocId)
+        && isDateString(data.date)
+        && data.price is number && data.price >= 0 && data.price <= 100000
+        && data.location is string && data.location.size() >= 1 && data.location.size() <= 160
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
     // ===============================================================
     // Collections
     // ===============================================================
@@ -351,6 +368,30 @@ service cloud.firestore {
           'brandModel', 'price', 'axle', 'tyreSize', 'wheelImageKey', 'imageFileName', 'imageUrl', 'notes', 'updatedAt'
         ]);
       allow delete: if isValidId(tyreId) && isOwner(existing().ownerId);
+    }
+
+    match /carWashLogs/{washId} {
+      allow get: if isValidId(washId) && isOwner(existing().ownerId);
+      allow list: if isSignedIn() && existing().ownerId == request.auth.uid;
+      allow create: if isSignedIn()
+        && isValidId(washId)
+        && isValidCarWashLogDoc(incoming())
+        && ownsParentCar(incoming().carDocId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isSignedIn()
+        && isValidId(washId)
+        && isOwner(existing().ownerId)
+        && isValidCarWashLogDoc(incoming())
+        && incoming().ownerId == existing().ownerId
+        && incoming().carId == existing().carId
+        && incoming().carDocId == existing().carDocId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'date', 'price', 'location', 'updatedAt'
+        ]);
+      allow delete: if isValidId(washId) && isOwner(existing().ownerId);
     }
 
     // Default deny for everything else

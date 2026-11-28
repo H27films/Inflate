@@ -89,12 +89,49 @@ export default function App() {
   const [purchasesExpanded, setPurchasesExpanded] = useState(false);
   const [logModalOpen, setLogModalOpen] = useState(false);
   const [addPurchaseOpen, setAddPurchaseOpen] = useState(false);
-  const [introComplete, setIntroComplete] = useState(false);
+  const [shouldSkipBootSplash] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    const now = Date.now();
+    try {
+      const skipSession = window.sessionStorage.getItem('inflate_skip_boot_splash');
+      const skipLocal = window.localStorage.getItem('inflate_skip_boot_splash');
+      if (skipSession === '1' || skipLocal === '1') {
+        window.sessionStorage.removeItem('inflate_skip_boot_splash');
+        window.localStorage.removeItem('inflate_skip_boot_splash');
+        return true;
+      }
+
+      const lastSessionRaw = window.sessionStorage.getItem('inflate_boot_splash_at');
+      if (lastSessionRaw) {
+        const elapsed = now - Number(lastSessionRaw);
+        if (Number.isFinite(elapsed) && elapsed >= 0 && elapsed < 15000) {
+          return true;
+        }
+      }
+
+      const lastLocalRaw = window.localStorage.getItem('inflate_boot_splash_at');
+      if (lastLocalRaw) {
+        const elapsed = now - Number(lastLocalRaw);
+        if (Number.isFinite(elapsed) && elapsed >= 0 && elapsed < 6500) {
+          return true;
+        }
+      }
+
+      window.sessionStorage.setItem('inflate_boot_splash_at', String(now));
+      window.localStorage.setItem('inflate_boot_splash_at', String(now));
+    } catch {
+      // Ignore storage restrictions
+    }
+    return false;
+  });
+
+  const [introComplete, setIntroComplete] = useState(shouldSkipBootSplash);
   const [manualSplashOpen, setManualSplashOpen] = useState(false);
   const [hasShownSignIn, setHasShownSignIn] = useState(false);
-  const [bootSplashFinished, setBootSplashFinished] = useState(false);
+  const [bootSplashFinished, setBootSplashFinished] = useState(shouldSkipBootSplash);
 
   useEffect(() => {
+    if (shouldSkipBootSplash) return;
     const prefersReduced =
       typeof window !== 'undefined' &&
       window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -102,11 +139,7 @@ export default function App() {
       setIntroComplete(true);
     }, prefersReduced ? 320 : 2900);
     return () => window.clearTimeout(timer);
-  }, []);
-
-  if (fatalError) {
-    throw fatalError;
-  }
+  }, [shouldSkipBootSplash]);
 
   useEffect(() => {
     const fallbackTimer = window.setTimeout(() => {
@@ -300,6 +333,10 @@ export default function App() {
       setBootSplashFinished(true);
     }
   }, [bootSplashFinished, introComplete, isBootHydrating]);
+
+  if (fatalError) {
+    throw fatalError;
+  }
 
   const renderContent = () => {
     if (isBootHydrating) {

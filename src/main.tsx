@@ -4,26 +4,35 @@ import App from './App.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 import './index.css';
 
-if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
-  const hadController = Boolean(navigator.serviceWorker.controller);
-  let refreshing = false;
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (!hadController || refreshing) return;
-    refreshing = true;
-    window.location.reload();
-  });
-}
+let pendingSwReload = false;
+let wentBackground = false;
 
-const updateSW = registerSW({
+registerSW({
   immediate: true,
-  onNeedRefresh() {
-    void updateSW(true);
+  onNeedReload() {
+    // Never force-reload right after startup (causes a double splash screen);
+    // apply the reload cleanly if the user backgrounds and returns, or on next launch.
+    pendingSwReload = true;
   },
   onRegisteredSW(_swUrl, registration) {
     if (!registration) return;
-    void registration.update();
     document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') {
+        wentBackground = true;
+        return;
+      }
       if (document.visibilityState === 'visible') {
+        if (pendingSwReload && wentBackground) {
+          pendingSwReload = false;
+          try {
+            window.sessionStorage.setItem('inflate_skip_boot_splash', '1');
+            window.localStorage.setItem('inflate_skip_boot_splash', '1');
+          } catch {
+            // Ignore storage restrictions
+          }
+          window.location.reload();
+          return;
+        }
         void registration.update();
       }
     });

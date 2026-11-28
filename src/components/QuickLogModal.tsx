@@ -2,11 +2,9 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   ArrowLeft,
-  Calendar,
   Check,
   Loader2,
   LocateFixed,
-  MapPin,
   X,
 } from 'lucide-react';
 import {
@@ -224,11 +222,6 @@ export function QuickLogModal({
     onClose();
   };
 
-  const targetSummary =
-    car.recommendedKpa.FL === car.recommendedKpa.RL
-      ? `Logs all tyres at ${car.recommendedKpa.FL} kPa`
-      : `Logs ${car.recommendedKpa.FL} kPa front · ${car.recommendedKpa.RL} kPa back`;
-
   return (
     <AnimatePresence>
       {open && step === 'choose' && (
@@ -299,81 +292,79 @@ export function QuickLogModal({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 bg-black/45 backdrop-blur-[2px] flex items-end sm:items-center justify-center p-0 sm:p-4"
+          transition={{ duration: 0.16 }}
+          className="fixed inset-0 z-50 bg-[#E9EBE7]/45 backdrop-blur-md flex items-end sm:items-center justify-center px-3.5 pt-4 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:p-4"
           onClick={onClose}
         >
           <motion.div
-            initial={{ y: 36, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 36, opacity: 0 }}
-            transition={{ type: 'spring', stiffness: 360, damping: 32 }}
+            initial={{ y: 20, opacity: 0, scale: 0.97 }}
+            animate={{ y: 0, opacity: 1, scale: 1 }}
+            exit={{ y: 16, opacity: 0, scale: 0.97 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 32 }}
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md bg-white rounded-t-3xl sm:rounded-3xl p-5 shadow-2xl max-h-[90vh] overflow-y-auto"
+            className="w-full max-w-[372px] rounded-[28px] p-4 bg-gradient-to-b from-white/80 via-[#F2F3F0]/72 to-[#E7E9E6]/68 backdrop-blur-2xl shadow-[0_20px_50px_rgba(17,19,21,0.16),inset_0_1.5px_1.5px_rgba(255,255,255,0.95),inset_0_-1px_2px_rgba(17,19,21,0.05)] max-h-[86dvh] overflow-y-auto no-scrollbar"
           >
             {step === 'air' && (
-              <form onSubmit={handleSubmitAir} className="space-y-4">
+              <form onSubmit={handleSubmitAir} className="space-y-3">
                 <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setLocError(null);
-                        setStep('choose');
-                      }}
-                      aria-label="Back to log options"
-                      className="w-9 h-9 rounded-full bg-[#F3F4F2] flex items-center justify-center text-[#111315] hover:bg-black/[0.06] shrink-0 cursor-pointer"
-                    >
-                      <ArrowLeft className="w-4 h-4" />
-                    </button>
-                    <div className="min-w-0">
-                      <h2 className="font-display text-lg font-semibold text-[#111315] leading-tight">
-                        Log air top-up
-                      </h2>
-                      <p className="text-xs text-[#5E646A] truncate">
-                        {car.displayTitle} · {targetSummary}
-                      </p>
-                    </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLocError(null);
+                      setStep('choose');
+                    }}
+                    aria-label="Back to log options"
+                    className="w-9 h-9 rounded-full bg-gradient-to-b from-[#D7DAD6]/52 to-white/68 backdrop-blur-md shadow-[inset_0_1px_1.5px_rgba(255,255,255,0.9),0_2px_6px_rgba(17,19,21,0.05)] flex items-center justify-center text-[#111315] hover:from-white/80 hover:to-white/90 transition-all shrink-0 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#111315]/25"
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                  </button>
+
+                  <div className="flex items-center gap-2">
+                    <WheelTyreIcon className="w-[18px] h-[18px] text-[#111315]" />
+                    <h2 className="font-display text-[16px] font-semibold tracking-tight text-[#111315]">
+                      Log Air
+                    </h2>
                   </div>
+
                   <button
                     type="button"
                     onClick={onClose}
                     aria-label="Close log dialog"
-                    className="w-10 h-10 rounded-full bg-[#F3F4F2] flex items-center justify-center text-[#111315] shrink-0 cursor-pointer"
+                    className="w-9 h-9 rounded-full bg-gradient-to-b from-[#D7DAD6]/52 to-white/68 backdrop-blur-md shadow-[inset_0_1px_1.5px_rgba(255,255,255,0.9),0_2px_6px_rgba(17,19,21,0.05)] flex items-center justify-center text-[#111315] hover:from-white/80 hover:to-white/90 transition-all shrink-0 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#111315]/25"
                   >
                     <X className="w-4 h-4" />
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-2.5">
                   <div>
-                    <span className="text-xs font-medium text-[#5E646A] flex items-center gap-1.5">
-                      <Calendar className="w-3.5 h-3.5" />
+                    <span className="text-[11px] font-medium text-[#5E646A] px-0.5 block">
                       Date
                     </span>
                     <ArcDatePicker
-                      label="Air top-up date"
+                      label="Air date"
                       value={date}
                       onChange={setDate}
+                      buttonClassName="mt-1 w-full h-10 px-3 rounded-xl bg-gradient-to-b from-[#D4D7D3]/50 via-[#E2E4E1]/48 to-[#F5F6F4]/62 backdrop-blur-md shadow-[inset_0_1.5px_3px_rgba(17,19,21,0.06),inset_0_-1px_1.5px_rgba(255,255,255,0.9)] text-xs font-mono text-[#111315] flex items-center justify-between gap-1.5 hover:from-[#CFD3CE]/58 hover:to-white/72 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#111315]/25 transition-all cursor-pointer"
                     />
                   </div>
 
                   <div>
                     <label
                       htmlFor="quick-log-location"
-                      className="text-xs font-medium text-[#5E646A] flex items-center gap-1.5"
+                      className="text-[11px] font-medium text-[#5E646A] px-0.5 block"
                     >
-                      <MapPin className="w-3.5 h-3.5" />
                       Location
                     </label>
-                    <div className="mt-1 flex items-center gap-2">
+                    <div className="mt-1 flex items-center gap-1.5">
                       <input
                         id="quick-log-location"
                         type="text"
                         required
-                        placeholder="e.g. Shell Kajang"
+                        placeholder="Shell Kajang"
                         value={locationText}
                         onChange={(e) => setLocationText(e.target.value)}
-                        className="flex-1 min-w-0 h-11 px-3 rounded-xl bg-[#F3F4F2] border border-black/8 text-xs text-[#111315]"
+                        className="flex-1 min-w-0 h-10 px-3 rounded-xl bg-gradient-to-b from-[#D4D7D3]/50 via-[#E2E4E1]/48 to-[#F5F6F4]/62 backdrop-blur-md shadow-[inset_0_1.5px_3px_rgba(17,19,21,0.06),inset_0_-1px_1.5px_rgba(255,255,255,0.9)] text-xs text-[#111315] placeholder:text-[#7E848A] hover:from-[#CFD3CE]/58 hover:to-white/72 focus:from-[#E5E7E4]/75 focus:to-white/85 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#111315]/25 transition-all"
                       />
                       <button
                         type="button"
@@ -381,33 +372,33 @@ export function QuickLogModal({
                         disabled={detectingLoc}
                         aria-label="Use current location"
                         title="Use current location"
-                        className="w-11 h-11 rounded-xl bg-[#111315] text-white hover:bg-black/85 disabled:opacity-60 transition-colors flex items-center justify-center shrink-0 cursor-pointer"
+                        className="w-10 h-10 rounded-xl bg-[#111315] text-white hover:bg-black/85 disabled:opacity-60 transition-colors flex items-center justify-center shrink-0 cursor-pointer"
                       >
                         {detectingLoc ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
                         ) : (
-                          <LocateFixed className="w-4 h-4" />
+                          <LocateFixed className="w-3.5 h-3.5" />
                         )}
                       </button>
                     </div>
-                    {locError && (
-                      <p className="mt-1 text-[11px] text-[#D9480F] leading-snug">
-                        {locError}
-                      </p>
-                    )}
                   </div>
                 </div>
 
-                {/* Previous Readings & Optional Low Tyre Flag */}
-                <div className="p-3.5 rounded-2xl bg-[#F3F4F2] border border-black/6 space-y-3">
-                  <div className="space-y-1.5">
-                    <span className="text-xs font-medium text-[#111315] block">
-                      Previous readings before top-up (kPa, optional)
+                {locError && (
+                  <p className="text-[11px] text-[#D9480F] leading-snug px-0.5">
+                    {locError}
+                  </p>
+                )}
+
+                <div className="pt-2.5 border-t border-black/[0.05] space-y-2.5">
+                  <div>
+                    <span className="text-[11px] font-medium text-[#5E646A] px-0.5 block mb-1">
+                      Before (kPa)
                     </span>
                     <div className="grid grid-cols-4 gap-2">
                       {TYRE_CORNERS.map((corner) => (
                         <label key={corner} className="block">
-                          <span className="text-[10.5px] font-mono text-[#5E646A] block">
+                          <span className="text-[10px] font-mono text-[#767C82] block text-center mb-0.5">
                             {corner}
                           </span>
                           <input
@@ -425,23 +416,23 @@ export function QuickLogModal({
                                 [corner]: digits,
                               }));
                             }}
-                            className="mt-0.5 w-full h-10 px-2 rounded-xl bg-white border border-black/10 text-sm font-mono font-semibold tabular-nums text-[#111315] text-center"
+                            className="w-full h-10 px-2 rounded-xl bg-gradient-to-b from-[#D4D7D3]/50 via-[#E2E4E1]/48 to-[#F5F6F4]/62 backdrop-blur-md shadow-[inset_0_1.5px_3px_rgba(17,19,21,0.06),inset_0_-1px_1.5px_rgba(255,255,255,0.9)] text-sm font-mono font-semibold tabular-nums text-[#111315] text-center placeholder:text-[#7E848A] hover:from-[#CFD3CE]/58 hover:to-white/72 focus:from-[#E5E7E4]/75 focus:to-white/85 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#111315]/25 transition-all"
                           />
                         </label>
                       ))}
                     </div>
                   </div>
 
-                  <div className="space-y-2 pt-1 border-t border-black/6">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs font-medium text-[#5E646A]">
-                        Flag a low tyre (optional)
+                  <div>
+                    <div className="flex items-center justify-between gap-2 px-0.5 mb-1">
+                      <span className="text-[11px] font-medium text-[#5E646A]">
+                        Low tyre
                       </span>
                       {lowCorner && (
                         <button
                           type="button"
                           onClick={() => setLowCorner(null)}
-                          className="text-[11px] font-medium text-[#5E646A] underline underline-offset-2 cursor-pointer"
+                          className="text-[11px] font-medium text-[#5E646A] hover:text-[#111315] cursor-pointer"
                         >
                           Clear
                         </button>
@@ -456,10 +447,10 @@ export function QuickLogModal({
                             key={corner}
                             type="button"
                             onClick={() => setLowCorner(selected ? null : corner)}
-                            className={`h-9 rounded-xl font-mono text-xs font-semibold border transition-colors cursor-pointer ${
+                            className={`h-9 rounded-xl font-mono text-xs font-semibold transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#111315]/25 ${
                               selected
-                                ? 'bg-[#FF5A1F] text-white border-[#FF5A1F]'
-                                : 'bg-white text-[#5E646A] border-black/8 hover:text-[#111315]'
+                                ? 'bg-[#FF5A1F] text-white shadow-[0_4px_12px_rgba(255,90,31,0.3)]'
+                                : 'bg-gradient-to-b from-[#D4D7D3]/50 via-[#E2E4E1]/48 to-[#F5F6F4]/62 backdrop-blur-md shadow-[inset_0_1.5px_3px_rgba(17,19,21,0.06),inset_0_-1px_1.5px_rgba(255,255,255,0.9)] text-[#5E646A] hover:from-[#CFD3CE]/58 hover:to-white/72 hover:text-[#111315]'
                             }`}
                           >
                             {corner}
@@ -471,76 +462,74 @@ export function QuickLogModal({
 
                   <input
                     type="text"
-                    placeholder="Optional note (e.g. Cold morning check)"
+                    placeholder="Note (optional)"
                     value={note}
                     onChange={(e) => setNote(e.target.value)}
-                    className="w-full h-10 px-3 rounded-xl bg-white border border-black/8 text-xs text-[#111315]"
+                    className="w-full h-10 px-3 rounded-xl bg-gradient-to-b from-[#D4D7D3]/50 via-[#E2E4E1]/48 to-[#F5F6F4]/62 backdrop-blur-md shadow-[inset_0_1.5px_3px_rgba(17,19,21,0.06),inset_0_-1px_1.5px_rgba(255,255,255,0.9)] text-xs text-[#111315] placeholder:text-[#7E848A] hover:from-[#CFD3CE]/58 hover:to-white/72 focus:from-[#E5E7E4]/75 focus:to-white/85 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#111315]/25 transition-all"
                   />
                 </div>
 
                 <button
                   type="submit"
-                  className="w-full h-12 rounded-2xl bg-[#111315] text-white text-sm font-semibold flex items-center justify-center gap-2 hover:bg-black/85 transition-colors cursor-pointer"
+                  className="w-full h-11 rounded-full bg-[#111315] text-white text-[13px] font-semibold flex items-center justify-center gap-2 shadow-[0_8px_22px_rgba(17,19,21,0.18)] hover:bg-black/85 active:scale-[0.99] transition-all cursor-pointer"
                 >
                   <Check className="w-4 h-4" />
-                  <span>Log top-up</span>
+                  <span>Log Air</span>
                 </button>
               </form>
             )}
 
             {step === 'wash' && (
-              <form onSubmit={handleSubmitWash} className="space-y-4">
+              <form onSubmit={handleSubmitWash} className="space-y-3">
                 <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setLocError(null);
-                        setStep('choose');
-                      }}
-                      aria-label="Back to log options"
-                      className="w-9 h-9 rounded-full bg-[#F3F4F2] flex items-center justify-center text-[#111315] hover:bg-black/[0.06] shrink-0 cursor-pointer"
-                    >
-                      <ArrowLeft className="w-4 h-4" />
-                    </button>
-                    <div className="min-w-0">
-                      <h2 className="font-display text-lg font-semibold text-[#111315] leading-tight">
-                        Log car wash
-                      </h2>
-                      <p className="text-xs text-[#5E646A] truncate">
-                        {car.displayTitle}
-                      </p>
-                    </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLocError(null);
+                      setStep('choose');
+                    }}
+                    aria-label="Back to log options"
+                    className="w-9 h-9 rounded-full bg-gradient-to-b from-[#D7DAD6]/52 to-white/68 backdrop-blur-md shadow-[inset_0_1px_1.5px_rgba(255,255,255,0.9),0_2px_6px_rgba(17,19,21,0.05)] flex items-center justify-center text-[#111315] hover:from-white/80 hover:to-white/90 transition-all shrink-0 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#111315]/25"
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                  </button>
+
+                  <div className="flex items-center gap-2">
+                    <CarWashIcon className="w-[19px] h-[19px] text-[#111315]" />
+                    <h2 className="font-display text-[16px] font-semibold tracking-tight text-[#111315]">
+                      Log Wash
+                    </h2>
                   </div>
+
                   <button
                     type="button"
                     onClick={onClose}
                     aria-label="Close log dialog"
-                    className="w-10 h-10 rounded-full bg-[#F3F4F2] flex items-center justify-center text-[#111315] shrink-0 cursor-pointer"
+                    className="w-9 h-9 rounded-full bg-gradient-to-b from-[#D7DAD6]/52 to-white/68 backdrop-blur-md shadow-[inset_0_1px_1.5px_rgba(255,255,255,0.9),0_2px_6px_rgba(17,19,21,0.05)] flex items-center justify-center text-[#111315] hover:from-white/80 hover:to-white/90 transition-all shrink-0 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#111315]/25"
                   >
                     <X className="w-4 h-4" />
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-2.5">
                   <div>
-                    <span className="text-xs font-medium text-[#5E646A] flex items-center gap-1.5">
-                      <Calendar className="w-3.5 h-3.5" />
+                    <span className="text-[11px] font-medium text-[#5E646A] px-0.5 block">
                       Date
                     </span>
                     <ArcDatePicker
                       label="Car wash date"
                       value={washDate}
                       onChange={setWashDate}
+                      buttonClassName="mt-1 w-full h-10 px-3 rounded-xl bg-gradient-to-b from-[#D4D7D3]/50 via-[#E2E4E1]/48 to-[#F5F6F4]/62 backdrop-blur-md shadow-[inset_0_1.5px_3px_rgba(17,19,21,0.06),inset_0_-1px_1.5px_rgba(255,255,255,0.9)] text-xs font-mono text-[#111315] flex items-center justify-between gap-1.5 hover:from-[#CFD3CE]/58 hover:to-white/72 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#111315]/25 transition-all cursor-pointer"
                     />
                   </div>
 
                   <label className="block">
-                    <span className="text-xs font-medium text-[#5E646A] flex items-center gap-1.5">
-                      Price (RM)
+                    <span className="text-[11px] font-medium text-[#5E646A] px-0.5 block">
+                      Price
                     </span>
                     <div className="mt-1 relative flex items-center">
-                      <span className="absolute left-3 text-xs font-mono font-semibold text-[#5E646A] pointer-events-none">
+                      <span className="absolute left-3 z-10 text-xs font-mono font-semibold text-[#5E646A] pointer-events-none">
                         RM
                       </span>
                       <input
@@ -553,7 +542,7 @@ export function QuickLogModal({
                         placeholder="25.00"
                         value={washPrice}
                         onChange={(e) => setWashPrice(e.target.value)}
-                        className="w-full h-11 pl-10 pr-3 rounded-xl bg-[#F3F4F2] border border-black/8 text-xs font-mono font-semibold tabular-nums text-[#111315]"
+                        className="w-full h-10 pl-9 pr-3 rounded-xl bg-gradient-to-b from-[#D4D7D3]/50 via-[#E2E4E1]/48 to-[#F5F6F4]/62 backdrop-blur-md shadow-[inset_0_1.5px_3px_rgba(17,19,21,0.06),inset_0_-1px_1.5px_rgba(255,255,255,0.9)] text-xs font-mono font-semibold tabular-nums text-[#111315] placeholder:text-[#7E848A] hover:from-[#CFD3CE]/58 hover:to-white/72 focus:from-[#E5E7E4]/75 focus:to-white/85 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#111315]/25 transition-all"
                       />
                     </div>
                   </label>
@@ -562,21 +551,20 @@ export function QuickLogModal({
                 <div>
                   <label
                     htmlFor="wash-log-location"
-                    className="text-xs font-medium text-[#5E646A] flex items-center gap-1.5"
+                    className="text-[11px] font-medium text-[#5E646A] px-0.5 block"
                   >
-                    <MapPin className="w-3.5 h-3.5" />
                     Location
                   </label>
-                  <div className="mt-1 flex items-center gap-2">
+                  <div className="mt-1 flex items-center gap-1.5">
                     <input
                       id="wash-log-location"
                       type="text"
                       required
                       maxLength={160}
-                      placeholder="e.g. Auto Spa Kajang"
+                      placeholder="Auto Spa Kajang"
                       value={washLocation}
                       onChange={(e) => setWashLocation(e.target.value)}
-                      className="flex-1 min-w-0 h-11 px-3 rounded-xl bg-[#F3F4F2] border border-black/8 text-xs text-[#111315]"
+                      className="flex-1 min-w-0 h-10 px-3 rounded-xl bg-gradient-to-b from-[#D4D7D3]/50 via-[#E2E4E1]/48 to-[#F5F6F4]/62 backdrop-blur-md shadow-[inset_0_1.5px_3px_rgba(17,19,21,0.06),inset_0_-1px_1.5px_rgba(255,255,255,0.9)] text-xs text-[#111315] placeholder:text-[#7E848A] hover:from-[#CFD3CE]/58 hover:to-white/72 focus:from-[#E5E7E4]/75 focus:to-white/85 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#111315]/25 transition-all"
                     />
                     <button
                       type="button"
@@ -584,17 +572,17 @@ export function QuickLogModal({
                       disabled={detectingLoc}
                       aria-label="Use current location"
                       title="Use current location"
-                      className="w-11 h-11 rounded-xl bg-[#111315] text-white hover:bg-black/85 disabled:opacity-60 transition-colors flex items-center justify-center shrink-0 cursor-pointer"
+                      className="w-10 h-10 rounded-xl bg-[#111315] text-white hover:bg-black/85 disabled:opacity-60 transition-colors flex items-center justify-center shrink-0 cursor-pointer"
                     >
                       {detectingLoc ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
                       ) : (
-                        <LocateFixed className="w-4 h-4" />
+                        <LocateFixed className="w-3.5 h-3.5" />
                       )}
                     </button>
                   </div>
                   {locError && (
-                    <p className="mt-1 text-[11px] text-[#D9480F] leading-snug">
+                    <p className="mt-1 text-[11px] text-[#D9480F] leading-snug px-0.5">
                       {locError}
                     </p>
                   )}
@@ -602,10 +590,10 @@ export function QuickLogModal({
 
                 <button
                   type="submit"
-                  className="w-full h-12 rounded-2xl bg-[#111315] text-white text-sm font-semibold flex items-center justify-center gap-2 hover:bg-black/85 transition-colors cursor-pointer"
+                  className="w-full h-11 rounded-full bg-[#111315] text-white text-[13px] font-semibold flex items-center justify-center gap-2 shadow-[0_8px_22px_rgba(17,19,21,0.18)] hover:bg-black/85 active:scale-[0.99] transition-all cursor-pointer"
                 >
                   <Check className="w-4 h-4" />
-                  <span>Log car wash</span>
+                  <span>Log Wash</span>
                 </button>
               </form>
             )}

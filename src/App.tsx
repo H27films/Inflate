@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeftRight, Plus } from 'lucide-react';
+import { ArrowLeft, ArrowLeftRight, Plus } from 'lucide-react';
 import { AnimatePresence } from 'motion/react';
 import { onAuthStateChanged, signInWithPopup, type User } from 'firebase/auth';
 import {
@@ -384,6 +384,7 @@ export default function App() {
       ...(activeCarId === 'slk250'
         ? { coolant: current.coolant ?? fallbackRenewals.coolant ?? '2026-11-16' }
         : {}),
+      ...(current.carWash ? { carWash: current.carWash } : {}),
       [field]: date,
     };
     runFirestoreAction(updateCarRenewalsRecord(user.uid, activeCarId, nextRenewals));
@@ -525,7 +526,7 @@ export default function App() {
               />
             </div>
 
-            {/* 4 Corner Boxes: FL, FR, RL, RR showing set kPa, age top-right, and PSI bottom-right */}
+            {/* 4 Corner Boxes: FL, FR, RL, RR showing set kPa, age top-right, and PSI (or prev reading when selected) bottom-right */}
             <div className="shrink-0 mt-auto md:mt-0 pb-1.5 md:pb-0 grid grid-cols-2 gap-2.5">
               {TYRE_CORNERS.map((corner) => {
                 const setKpa = activeCar.recommendedKpa[corner];
@@ -533,6 +534,18 @@ export default function App() {
                 const purchaseInfo = getCornerPurchaseInfo(activeCar.purchaseLogs, corner);
                 const tyreAge = purchaseInfo ? formatTyreAgeMonths(purchaseInfo.date) : null;
                 const isSelected = selectedCorner === corner;
+
+                let lastPrevKpa: number | null = null;
+                for (const entry of sortedPressureLogs) {
+                  const beforeVal = entry.beforePressures?.[corner];
+                  const lowBeforeVal =
+                    entry.lowTyre?.corner === corner ? entry.lowTyre.beforeKpa : undefined;
+                  const resolved = beforeVal ?? lowBeforeVal;
+                  if (resolved !== undefined) {
+                    lastPrevKpa = resolved;
+                    break;
+                  }
+                }
 
                 return (
                   <button
@@ -577,11 +590,18 @@ export default function App() {
                         </span>
                       </div>
                       <span
-                        className={`font-mono text-[10.5px] sm:text-[11px] tracking-tight tabular-nums whitespace-nowrap ${
-                          isSelected ? 'text-white/70' : 'text-[#5E646A]'
+                        className={`font-mono text-[10.5px] sm:text-[11px] tracking-tight tabular-nums whitespace-nowrap inline-flex items-center gap-1 ${
+                          isSelected ? 'text-white/75' : 'text-[#5E646A]'
                         }`}
                       >
-                        {psiApprox} PSI
+                        {isSelected ? (
+                          <>
+                            <ArrowLeft className="w-2.5 h-2.5 sm:w-3 sm:h-3 shrink-0" aria-hidden="true" />
+                            <span>{lastPrevKpa !== null ? `${lastPrevKpa} kPa` : '—'}</span>
+                          </>
+                        ) : (
+                          `${psiApprox} PSI`
+                        )}
                       </span>
                     </div>
                   </button>

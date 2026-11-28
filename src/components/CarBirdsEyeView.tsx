@@ -380,6 +380,12 @@ export function CarBirdsEyeView({
   }, [selectedCorner, zoomedCorner]);
 
   useEffect(() => {
+    if (selectedCorner) {
+      setRoofSelected(false);
+    }
+  }, [selectedCorner]);
+
+  useEffect(() => {
     let active = true;
     if (!cutoutUrls.slk250) {
       processCarAsset('slk250')
@@ -525,7 +531,7 @@ export function CarBirdsEyeView({
           <motion.div
             animate={{
               scale: roofSelected && !isZoomed ? 0.76 : 1,
-              y: roofSelected && !isZoomed ? (car.id === 'slk250' ? '-2%' : '1%') : '0%',
+              y: roofSelected && !isZoomed ? (car.id === 'slk250' ? '-4.5%' : '2%') : '0%',
             }}
             transition={{ type: 'spring', stiffness: 280, damping: 28 }}
             className="relative w-full h-full flex items-center justify-center origin-center will-change-transform"
@@ -612,11 +618,12 @@ export function CarBirdsEyeView({
               <button
                 type="button"
                 onClick={() => {
-                  setRoofSelected((prev) => {
-                    const next = !prev;
-                    if (next) onSelectCorner(null);
-                    return next;
-                  });
+                  if (selectedCorner) {
+                    onSelectCorner(null);
+                    setRoofSelected(true);
+                    return;
+                  }
+                  setRoofSelected((prev) => !prev);
                 }}
                 aria-label={
                   car.id === 'slk250'
@@ -640,7 +647,7 @@ export function CarBirdsEyeView({
 
           {/* Front Plate, Insurance, Car Tax, Coolant (left) & Car Wash (right) Pop-Ups */}
           <AnimatePresence>
-            {roofSelected && !isZoomed && (
+            {roofSelected && !isZoomed && !selectedCorner && (
               <>
                 <motion.div
                   key={`${car.id}-plate`}
@@ -649,7 +656,7 @@ export function CarBirdsEyeView({
                   exit={{ opacity: 0, y: 2 }}
                   transition={{ duration: 0.18 }}
                   style={{
-                    top: car.id === 'slk250' ? '6%' : '7.5%',
+                    top: car.id === 'slk250' ? '5%' : '6%',
                     left: '50%',
                   }}
                   className="absolute -translate-x-1/2 -translate-y-1/2 z-10 text-center w-max pointer-events-none"
@@ -666,7 +673,7 @@ export function CarBirdsEyeView({
                   exit={{ opacity: 0, x: 4 }}
                   transition={{ duration: 0.18 }}
                   style={{
-                    top: '36%',
+                    top: car.id === 'slk250' ? '45.5%' : '52%',
                     right: 'calc(82% + 14px)',
                   }}
                   className="absolute -translate-y-1/2 text-right w-max max-w-[125px] sm:max-w-[175px]"
@@ -702,7 +709,7 @@ export function CarBirdsEyeView({
                   exit={{ opacity: 0, x: -4 }}
                   transition={{ duration: 0.18 }}
                   style={{
-                    top: '36%',
+                    top: car.id === 'slk250' ? '45.5%' : '52%',
                     left: 'calc(82% + 14px)',
                   }}
                   className="absolute -translate-y-1/2 text-left w-max max-w-[125px] sm:max-w-[175px]"
@@ -734,13 +741,13 @@ export function CarBirdsEyeView({
                 {car.id === 'slk250' && (
                   <motion.div
                     key={`${car.id}-coolant`}
-                    initial={{ opacity: 0, x: 6 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: 4 }}
+                    initial={{ opacity: 0, x: 4, y: -4 }}
+                    animate={{ opacity: 1, x: 0, y: 0 }}
+                    exit={{ opacity: 0, x: 3, y: -2 }}
                     transition={{ duration: 0.18 }}
                     style={{
-                      top: '74%',
-                      right: 'calc(82% + 14px)',
+                      top: '87%',
+                      right: 'calc(74% + 10px)',
                     }}
                     className="absolute -translate-y-1/2 z-10 text-right w-max max-w-[125px] sm:max-w-[175px]"
                   >
@@ -762,13 +769,13 @@ export function CarBirdsEyeView({
 
                 <motion.div
                   key={`${car.id}-carwash`}
-                  initial={{ opacity: 0, x: -6 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -4 }}
+                  initial={{ opacity: 0, x: -4, y: -4 }}
+                  animate={{ opacity: 1, x: 0, y: 0 }}
+                  exit={{ opacity: 0, x: -3, y: -2 }}
                   transition={{ duration: 0.18 }}
                   style={{
-                    top: '74%',
-                    left: 'calc(82% + 14px)',
+                    top: '87%',
+                    left: 'calc(74% + 10px)',
                   }}
                   className="absolute -translate-y-1/2 z-10 text-left w-max max-w-[125px] sm:max-w-[175px]"
                 >
@@ -806,7 +813,7 @@ export function CarBirdsEyeView({
 
           {/* Borderless Text Pop-Up Next to Selected Wheel: Click to zoom in */}
           <AnimatePresence>
-            {activeSpot && !isZoomed && (
+            {activeSpot && !isZoomed && !roofSelected && (
               <motion.div
                 key={`${car.id}-${activeSpot.corner}`}
                 role="button"

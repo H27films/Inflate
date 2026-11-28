@@ -442,21 +442,35 @@ export function CarBirdsEyeView({
     ? formatTyreAgeMonthsUpper(selectedInfo.date)
     : null;
   const latestLog = car.pressureLogs[0] ?? null;
-  const latestLowCorner = latestLog?.lowTyre?.corner ?? null;
+  // TEMP PREVIEW: revert after confirmation
+  const isPressureLogOverdue = true || (latestLog ? getDaysSince(latestLog.date) >= 13 : true);
 
-  const getCornerRingState = (corner: TyreCorner): 'pulse-red' | 'red' | 'orange' | 'green' => {
-    const isFlagged = latestLowCorner === corner;
-    if (isFlagged) return 'pulse-red';
+  const isEntryCornerRed = (
+    entry: CarProfile['pressureLogs'][number],
+    corner: TyreCorner
+  ): boolean => {
+    if (entry.lowTyre?.corner === corner) return true;
+    const reading = entry.beforePressures?.[corner] ?? entry.pressures[corner];
+    const standard = car.recommendedKpa[corner];
+    return standard - reading >= 40;
+  };
+
+  const hasRepeatedRedAlert = (corner: TyreCorner): boolean =>
+    car.pressureLogs.length >= 2 &&
+    isEntryCornerRed(car.pressureLogs[0], corner) &&
+    isEntryCornerRed(car.pressureLogs[1], corner);
+
+  const getCornerRingState = (corner: TyreCorner): 'red' | 'orange' | 'green' => {
     if (!latestLog) return 'orange';
+    if (isEntryCornerRed(latestLog, corner)) return 'red';
 
     const reading =
       latestLog.beforePressures?.[corner] ?? latestLog.pressures[corner];
     const standard = car.recommendedKpa[corner];
     const drop = standard - reading;
 
-    if (drop <= 10) return 'green';
-    if (drop <= 40) return 'orange';
-    return 'red';
+    if (drop <= 15) return 'green';
+    return 'orange';
   };
 
   const zoomedSpot = zoomedCorner
@@ -547,12 +561,70 @@ export function CarBirdsEyeView({
             {spots.map((spot) => {
               const isSelected = selectedCorner === spot.corner;
               const ringState = getCornerRingState(spot.corner);
-              const selectedClasses =
+              const ambientHotspotTone: 'red' | 'blue' | null = isSelected
+                ? null
+                : hasRepeatedRedAlert(spot.corner)
+                  ? 'red'
+                  : isPressureLogOverdue
+                    ? 'blue'
+                    : null;
+              const isLeftSide = spot.corner === 'FL' || spot.corner === 'RL';
+              const pulseConfig =
                 ringState === 'green'
-                  ? 'bg-[#166534]/24 ring-2 ring-[#166534] shadow-[0_0_16px_rgba(22,101,52,0.42)] scale-105'
-                  : ringState === 'red'
-                    ? 'bg-[#DC2626]/26 ring-2 ring-[#DC2626] shadow-[0_0_18px_rgba(220,38,38,0.48)] scale-105'
-                    : 'bg-[#FF5A1F]/28 ring-2 ring-[#FF5A1F] shadow-[0_0_18px_rgba(255,90,31,0.5)] scale-105';
+                  ? {
+                      borderColor: ['#166534', '#228B4E', '#166534'],
+                      backgroundColor: [
+                        'rgba(22, 101, 52, 0.22)',
+                        'rgba(34, 139, 78, 0.30)',
+                        'rgba(22, 101, 52, 0.22)',
+                      ],
+                      boxShadow: [
+                        '0 0 11px rgba(22, 101, 52, 0.32)',
+                        '0 0 16px rgba(22, 101, 52, 0.46)',
+                        '0 0 11px rgba(22, 101, 52, 0.32)',
+                      ],
+                      scale: [1.03, 1.055, 1.03],
+                      duration: 2.3,
+                    }
+                  : ringState === 'orange'
+                    ? {
+                        borderColor: ['#F97316', '#FB923C', '#F97316'],
+                        backgroundColor: [
+                          'rgba(249, 115, 22, 0.22)',
+                          'rgba(251, 146, 60, 0.30)',
+                          'rgba(249, 115, 22, 0.22)',
+                        ],
+                        boxShadow: [
+                          '0 0 11px rgba(249, 115, 22, 0.34)',
+                          '0 0 16px rgba(251, 146, 60, 0.48)',
+                          '0 0 11px rgba(249, 115, 22, 0.34)',
+                        ],
+                        scale: [1.03, 1.055, 1.03],
+                        duration: 2.2,
+                      }
+                    : {
+                        borderColor: ['#B91C1C', '#EF4444', '#B91C1C'],
+                        backgroundColor: [
+                          'rgba(185, 28, 28, 0.24)',
+                          'rgba(239, 68, 68, 0.38)',
+                          'rgba(185, 28, 28, 0.24)',
+                        ],
+                        boxShadow: [
+                          '0 0 14px rgba(185, 28, 28, 0.45)',
+                          '0 0 26px rgba(239, 68, 68, 0.74)',
+                          '0 0 14px rgba(185, 28, 28, 0.45)',
+                        ],
+                        scale: [1.04, 1.12, 1.04],
+                        duration: 1.45,
+                      };
+              const outerGlowBg =
+                ambientHotspotTone === 'red'
+                  ? `radial-gradient(ellipse 92% 64% at ${isLeftSide ? '88%' : '12%'} 50%, rgba(220, 38, 38, 0.36) 0%, rgba(239, 68, 68, 0.18) 42%, rgba(239, 68, 68, 0.05) 70%, rgba(239, 68, 68, 0) 90%)`
+                  : `radial-gradient(ellipse 92% 64% at ${isLeftSide ? '88%' : '12%'} 50%, rgba(78, 106, 148, 0.42) 0%, rgba(92, 118, 157, 0.22) 42%, rgba(92, 118, 157, 0.06) 70%, rgba(92, 118, 157, 0) 90%)`;
+              const innerGlowBg =
+                ambientHotspotTone === 'red'
+                  ? `radial-gradient(ellipse 88% 66% at ${isLeftSide ? '88%' : '12%'} 50%, rgba(239, 68, 68, 0.56) 0%, rgba(220, 38, 38, 0.24) 55%, rgba(220, 38, 38, 0) 92%)`
+                  : `radial-gradient(ellipse 88% 66% at ${isLeftSide ? '88%' : '12%'} 50%, rgba(78, 106, 148, 0.62) 0%, rgba(92, 118, 157, 0.28) 55%, rgba(92, 118, 157, 0) 92%)`;
               return (
                 <button
                   key={spot.corner}
@@ -577,37 +649,95 @@ export function CarBirdsEyeView({
                   }}
                   className="absolute -translate-x-1/2 -translate-y-1/2 w-12 h-16 flex items-center justify-center cursor-pointer focus:outline-none group"
                 >
-                  {isSelected && ringState === 'pulse-red' ? (
+                  {ambientHotspotTone && (
+                    <span
+                      aria-hidden="true"
+                      style={{
+                        maskImage: isLeftSide
+                          ? 'linear-gradient(to left, transparent 0%, rgba(0,0,0,0.45) 14%, black 34%, black 100%)'
+                          : 'linear-gradient(to right, transparent 0%, rgba(0,0,0,0.45) 14%, black 34%, black 100%)',
+                        WebkitMaskImage: isLeftSide
+                          ? 'linear-gradient(to left, transparent 0%, rgba(0,0,0,0.45) 14%, black 34%, black 100%)'
+                          : 'linear-gradient(to right, transparent 0%, rgba(0,0,0,0.45) 14%, black 34%, black 100%)',
+                      }}
+                      className={`pointer-events-none absolute top-1/2 -translate-y-1/2 w-14 h-20 flex items-center ${
+                        isLeftSide ? 'right-[22px] justify-end' : 'left-[22px] justify-start'
+                      }`}
+                    >
+                      <motion.span
+                        key={`${spot.corner}-outer-${ambientHotspotTone}`}
+                        animate={
+                          ambientHotspotTone === 'blue'
+                            ? {
+                                opacity: [0.88, 1, 0.88],
+                                scale: [0.985, 1.015, 0.985],
+                              }
+                            : {
+                                opacity: [0.72, 1, 0.72],
+                                scale: [0.95, 1.07, 0.95],
+                              }
+                        }
+                        transition={{
+                          duration: ambientHotspotTone === 'blue' ? 3.4 : 2.1,
+                          repeat: Infinity,
+                          ease: 'easeInOut',
+                        }}
+                        style={{
+                          background: outerGlowBg,
+                          transformOrigin: isLeftSide ? 'right center' : 'left center',
+                        }}
+                        className={`w-14 h-20 blur-[2.5px] ${
+                          isLeftSide ? 'rounded-l-full rounded-r-md' : 'rounded-r-full rounded-l-md'
+                        }`}
+                      />
+                      <motion.span
+                        key={`${spot.corner}-inner-${ambientHotspotTone}`}
+                        animate={
+                          ambientHotspotTone === 'blue'
+                            ? {
+                                opacity: [0.9, 1, 0.9],
+                                scale: [0.985, 1.015, 0.985],
+                              }
+                            : {
+                                opacity: [0.78, 1, 0.78],
+                                scale: [0.95, 1.06, 0.95],
+                              }
+                        }
+                        transition={{
+                          duration: ambientHotspotTone === 'blue' ? 3.4 : 2.1,
+                          repeat: Infinity,
+                          ease: 'easeInOut',
+                        }}
+                        style={{
+                          background: innerGlowBg,
+                          transformOrigin: isLeftSide ? 'right center' : 'left center',
+                        }}
+                        className={`absolute w-7 h-12 blur-[1.5px] ${
+                          isLeftSide
+                            ? 'right-[2px] rounded-l-full rounded-r-sm'
+                            : 'left-[2px] rounded-r-full rounded-l-sm'
+                        }`}
+                      />
+                    </span>
+                  )}
+                  {isSelected ? (
                     <motion.span
+                      key={`${spot.corner}-${ringState}`}
                       animate={{
-                        borderColor: ['#B91C1C', '#EF4444', '#B91C1C'],
-                        backgroundColor: [
-                          'rgba(185, 28, 28, 0.24)',
-                          'rgba(239, 68, 68, 0.36)',
-                          'rgba(185, 28, 28, 0.24)',
-                        ],
-                        boxShadow: [
-                          '0 0 14px rgba(185, 28, 28, 0.45)',
-                          '0 0 24px rgba(239, 68, 68, 0.72)',
-                          '0 0 14px rgba(185, 28, 28, 0.45)',
-                        ],
-                        scale: [1.04, 1.1, 1.04],
+                        borderColor: pulseConfig.borderColor,
+                        backgroundColor: pulseConfig.backgroundColor,
+                        boxShadow: pulseConfig.boxShadow,
+                        scale: pulseConfig.scale,
                       }}
                       transition={{
-                        duration: 1.5,
+                        duration: pulseConfig.duration,
                         repeat: Infinity,
                         ease: 'easeInOut',
                       }}
-                      className="w-7 h-12 rounded-xl border-2"
+                      className="relative z-10 w-7 h-12 rounded-xl border-2"
                     />
                   ) : (
-                    <span
-                      className={`w-7 h-12 rounded-xl transition-all duration-150 ${
-                        isSelected
-                          ? selectedClasses
-                          : 'bg-transparent group-hover:ring-1 group-hover:ring-black/25 group-hover:bg-black/5'
-                      }`}
-                    />
+                    <span className="relative z-10 w-7 h-12 rounded-xl transition-all duration-150 bg-transparent group-hover:ring-1 group-hover:ring-black/25 group-hover:bg-black/5" />
                   )}
                 </button>
               );
@@ -847,7 +977,7 @@ export function CarBirdsEyeView({
                     ? { right: `calc(${100 - activeSpot.leftPct}% + 22px)` }
                     : { left: `calc(${activeSpot.leftPct}% + 22px)` }),
                 }}
-                className={`absolute -translate-y-1/2 z-10 w-max max-w-[100px] sm:max-w-[165px] space-y-0.5 cursor-pointer focus:outline-none ${
+                className={`absolute -translate-y-1/2 z-10 w-max max-w-[116px] sm:max-w-[185px] space-y-0.5 cursor-pointer focus:outline-none ${
                   activeSpot.corner === 'FL' || activeSpot.corner === 'RL'
                     ? 'text-right'
                     : 'text-left'
@@ -855,16 +985,16 @@ export function CarBirdsEyeView({
               >
                 {selectedInfo ? (
                   <>
-                    <p className="font-display text-[11px] sm:text-xs font-bold text-[#111315] leading-tight">
+                    <p className="font-display text-[13px] sm:text-[14px] font-medium text-[#111315] leading-tight">
                       <WaveEnlargeText text={selectedInfo.brandModel} />
                     </p>
                     {selectedSize && (
-                      <p className="font-mono text-[10px] sm:text-[11px] font-medium text-[#5E646A] leading-tight">
+                      <p className="font-mono text-[11px] sm:text-[12px] font-normal text-[#5E646A] leading-tight">
                         <WaveEnlargeText text={selectedSize} />
                       </p>
                     )}
                     {selectedUnitPrice !== null && (
-                      <p className="font-mono text-[11px] sm:text-xs font-bold text-[#FF5A1F] tabular-nums leading-tight">
+                      <p className="font-mono text-[12px] sm:text-[13px] font-medium text-[#FF5A1F] tabular-nums leading-tight">
                         <WaveEnlargeText text={formatPrice(selectedUnitPrice)} />
                       </p>
                     )}
@@ -872,11 +1002,11 @@ export function CarBirdsEyeView({
                 ) : (
                   <>
                     {selectedSize && (
-                      <p className="font-mono text-[10px] sm:text-[11px] font-medium text-[#5E646A] leading-tight">
+                      <p className="font-mono text-[11px] sm:text-[12px] font-normal text-[#5E646A] leading-tight">
                         <WaveEnlargeText text={selectedSize} />
                       </p>
                     )}
-                    <p className="text-[10px] sm:text-[11px] text-[#8C9298] leading-tight">
+                    <p className="text-[11px] sm:text-[12px] font-normal text-[#8C9298] leading-tight">
                       <WaveEnlargeText text="No purchase" />
                     </p>
                   </>
